@@ -1,0 +1,32 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: max(1.5rem, env(safe-area-inset-top)) 1.5rem 1.5rem;
+}
+
+.page h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.status {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.status[data-state='ready'] {
+  color: var(--ok);
+}
+
+.status[data-state='error'] {
+  color: var(--err);
+}
