@@ -169,4 +169,28 @@ check('nowOffset locates the marker, and is null off-day', () => {
   assert.equal(nowOffset(DAY_S, DAY_E, D('2026-06-12T00:00:00Z')), null)
 })
 
+
+
+import { insertionIndex } from '../src/lib/layout.ts'
+
+console.log('\ndrag insertion')
+const MIDS = [10, 30, 50, 70]
+check('above everything lands at 0', () => {
+  assert.equal(insertionIndex(MIDS, 0), 0)
+  assert.equal(insertionIndex(MIDS, 9), 0)
+})
+check('below everything lands at the end', () => {
+  assert.equal(insertionIndex(MIDS, 999), 4)
+})
+check('between two rows lands between them', () => {
+  assert.equal(insertionIndex(MIDS, 31), 2)
+  assert.equal(insertionIndex(MIDS, 49), 2)
+})
+check('exactly on a midpoint stays above it', () => {
+  assert.equal(insertionIndex(MIDS, 30), 1)
+})
+check('an empty list always lands at 0', () => {
+  assert.equal(insertionIndex([], 500), 0)
+})
+
 console.log(`\n${n} assertions passed\n`)

@@ -1,4 +1,5 @@
-import type { FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type PointerEvent } from 'react'
+import { insertionIndex } from '../lib/layout'
 import type { Task, Uuid } from '../lib/types'
 
 export default function Sequence({
@@ -10,6 +11,7 @@ export default function Sequence({
   onToggle,
   onComplete,
   onClearCompleted,
+  onMove,
 }: {
   tasks: readonly Task[]
   runningTaskId: Uuid | null
@@ -19,8 +21,54 @@ export default function Sequence({
   onToggle: (task: Task) => void
   onComplete: (task: Task) => void
   onClearCompleted: () => void
+  onMove: (taskId: Uuid, before: string | null, after: string | null) => void
 }) {
+  const rows = useRef(new Map<Uuid, HTMLLIElement>())
+  const [dragId, setDragId] = useState<Uuid | null>(null)
+  const [insertAt, setInsertAt] = useState<number | null>(null)
+
   const hasCompleted = tasks.some((t) => t.completed_at)
+  const others = tasks.filter((t) => t.id !== dragId)
+
+  /**
+   * Pointer events rather than HTML5 drag-and-drop: the latter does not fire on
+   * iOS at all, and this has to work on the phone first.
+   */
+  function onPointerDown(e: PointerEvent<HTMLButtonElement>, task: Task) {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDragId(task.id)
+    setInsertAt(tasks.findIndex((t) => t.id === task.id))
+  }
+
+  function onPointerMove(e: PointerEvent<HTMLButtonElement>) {
+    if (!dragId) return
+    // midpoints of every row EXCEPT the one in hand, so the result is an index
+    // into that list and names the two neighbours directly
+    const midpoints = others
+      .map((t) => rows.current.get(t.id))
+      .filter((el): el is HTMLLIElement => Boolean(el))
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        return r.top + r.height / 2
+      })
+    setInsertAt(insertionIndex(midpoints, e.clientY))
+  }
+
+  function onPointerUp(e: PointerEvent<HTMLButtonElement>) {
+    if (dragId && insertAt !== null) {
+      const before = others[insertAt - 1]?.rank ?? null
+      const after = others[insertAt]?.rank ?? null
+      const current = tasks.findIndex((t) => t.id === dragId)
+      const unchanged =
+        others[insertAt - 1]?.id === tasks[current - 1]?.id &&
+        others[insertAt]?.id === tasks[current + 1]?.id
+      if (!unchanged) onMove(dragId, before, after)
+    }
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
+    setDragId(null)
+    setInsertAt(null)
+  }
 
   return (
     <section className="pane sequence">
@@ -36,27 +84,41 @@ export default function Sequence({
       {tasks.length === 0 ? (
         <p className="muted">Nothing in the sequence.</p>
       ) : (
-        <ul className="seq">
-          {tasks.map((task) => {
-            const isOn = runningTaskId === task.id
-            return (
-              <li key={task.id} className={task.completed_at ? 'done' : undefined}>
-                <input
-                  type="checkbox"
-                  checked={task.completed_at !== null}
-                  onChange={() => onComplete(task)}
-                  aria-label={`Complete ${task.title}`}
+        <ul className={dragId ? 'seq is-dragging' : 'seq'}>
+          {others.map((task, i) => (
+            <RowGroup
+              key={task.id}
+              showLine={insertAt === i}
+              task={task}
+              rows={rows}
+              dragId={dragId}
+              runningTaskId={runningTaskId}
+              onToggle={onToggle}
+              onComplete={onComplete}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+            />
+          ))}
+          {insertAt === others.length && <li className="drop-line" aria-hidden="true" />}
+          {dragId &&
+            tasks
+              .filter((t) => t.id === dragId)
+              .map((task) => (
+                <RowGroup
+                  key={task.id}
+                  showLine={false}
+                  task={task}
+                  rows={rows}
+                  dragId={dragId}
+                  runningTaskId={runningTaskId}
+                  onToggle={onToggle}
+                  onComplete={onComplete}
+                  onPointerDown={onPointerDown}
+                  onPointerMove={onPointerMove}
+                  onPointerUp={onPointerUp}
                 />
-                <span className="title">{task.title}</span>
-                <button
-                  className={isOn ? 'toggle on' : 'toggle'}
-                  onClick={() => onToggle(task)}
-                >
-                  {isOn ? 'Stop' : 'Start'}
-                </button>
-              </li>
-            )
-          })}
+              ))}
         </ul>
       )}
 
@@ -66,5 +128,67 @@ export default function Sequence({
         </button>
       )}
     </section>
+  )
+}
+
+function RowGroup({
+  task,
+  showLine,
+  rows,
+  dragId,
+  runningTaskId,
+  onToggle,
+  onComplete,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+}: {
+  task: Task
+  showLine: boolean
+  rows: React.RefObject<Map<Uuid, HTMLLIElement>>
+  dragId: Uuid | null
+  runningTaskId: Uuid | null
+  onToggle: (t: Task) => void
+  onComplete: (t: Task) => void
+  onPointerDown: (e: PointerEvent<HTMLButtonElement>, t: Task) => void
+  onPointerMove: (e: PointerEvent<HTMLButtonElement>) => void
+  onPointerUp: (e: PointerEvent<HTMLButtonElement>) => void
+}) {
+  const isOn = runningTaskId === task.id
+  const isDragged = dragId === task.id
+  return (
+    <>
+      {showLine && <li className="drop-line" aria-hidden="true" />}
+      <li
+        ref={(el) => {
+          if (el) rows.current.set(task.id, el)
+          else rows.current.delete(task.id)
+        }}
+        className={[task.completed_at ? 'done' : '', isDragged ? 'is-dragged' : '']
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <button
+          className="grip"
+          aria-label={`Reorder ${task.title}`}
+          onPointerDown={(e) => onPointerDown(e, task)}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          ⠿
+        </button>
+        <input
+          type="checkbox"
+          checked={task.completed_at !== null}
+          onChange={() => onComplete(task)}
+          aria-label={`Complete ${task.title}`}
+        />
+        <span className="title">{task.title}</span>
+        <button className={isOn ? 'toggle on' : 'toggle'} onClick={() => onToggle(task)}>
+          {isOn ? 'Stop' : 'Start'}
+        </button>
+      </li>
+    </>
   )
 }

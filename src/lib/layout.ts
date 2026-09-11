@@ -107,3 +107,18 @@ export function nowOffset(dayStart: Date, dayEnd: Date, now: Date): number | nul
   if (span <= 0 || at < 0 || at > span) return null
   return at / span
 }
+
+/**
+ * Where a dragged row should land, given the vertical midpoints of the rows it
+ * is being dragged past.
+ *
+ * `midpoints` MUST exclude the row being dragged: the answer is an index into
+ * that reduced list, which is exactly what is needed to name the two
+ * neighbours a new fractional rank goes between. Including the dragged row
+ * would make an item dropped on itself appear to move.
+ */
+export function insertionIndex(midpoints: readonly number[], y: number): number {
+  let i = 0
+  while (i < midpoints.length && y > midpoints[i]) i++
+  return i
+}

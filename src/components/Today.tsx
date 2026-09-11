@@ -12,6 +12,7 @@ import {
   getRunningEntry,
   getSequence,
   isStale,
+  moveTask,
   startTrail,
   stopTrail,
   uncompleteTask,
@@ -285,6 +286,7 @@ export default function Today({ email }: { email: string }) {
             guard(() => (t.completed_at ? uncompleteTask(t.id) : completeTask(t.id)))
           }
           onClearCompleted={() => guard(() => clearCompleted())}
+          onMove={(id, before, after) => guard(() => moveTask(id, before, after))}
         />
       </div>
 

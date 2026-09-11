@@ -624,3 +624,40 @@ input[type='number'] {
 .rule-text .muted {
   font-size: 0.75rem;
 }
+
+/* drag to reorder ------------------------------------------------------ */
+
+.grip {
+  flex: none;
+  min-height: 0;
+  padding: 0.3rem 0.35rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: grab;
+  /* the handle must not scroll the pane while dragging on a touch screen */
+  touch-action: none;
+}
+.grip:active {
+  cursor: grabbing;
+}
+
+.seq.is-dragging {
+  /* stop text selection turning the drag into a highlight */
+  user-select: none;
+}
+
+.seq li.is-dragged {
+  opacity: 0.45;
+}
+
+.drop-line {
+  height: 0;
+  /* --trail is muted enough in dark mode to read as another row separator */
+  border-top: 3px solid var(--trail-glow);
+  margin: -1px 0;
+  padding: 0;
+  list-style: none;
+}
