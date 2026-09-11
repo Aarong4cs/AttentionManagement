@@ -420,6 +420,8 @@ export async function createTaskRow(task: Task): Promise<Task> {
       estimated_minutes: task.estimated_minutes,
       rank: task.rank,
       completed_at: task.completed_at,
+      color: task.color,
+      priority: task.priority,
     })
     .select()
     .single()

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { dragBlock, layoutDay, nowOffset } from '../lib/layout'
+import { dragBlock, layoutDay, nowOffset, snap } from '../lib/layout'
 import { formatRange } from '../lib/time'
 import { useLongPress } from '../hooks/useLongPress'
 import type { Block } from '../lib/types'
@@ -27,6 +27,10 @@ function clock(d: Date, tz: string): string {
  */
 const TWO_LINE_MINUTES = 24
 
+/** A block created by clicking empty track, and the grid it lands on. */
+const NEW_BLOCK_MINUTES = 30
+const NEW_BLOCK_SNAP_MINUTES = 15
+
 export interface TimelineDay {
   key: string
   start: Date
@@ -45,6 +49,8 @@ type Grab = {
   originY: number
   /** ms represented by one pixel, measured from the rendered column */
   msPerPx: number
+  /** the column the drag began in, so a sideways move can be measured */
+  originDay: TimelineDay
   start: Date
   end: Date
 }
@@ -57,6 +63,7 @@ export default function Timeline({
   onReschedule,
   onDelete,
   onMenu,
+  onCreate,
 }: {
   days: readonly TimelineDay[]
   blocks: readonly Block[]
@@ -65,12 +72,28 @@ export default function Timeline({
   onReschedule?: (block: Block, start: Date, end: Date) => void
   onDelete?: (block: Block) => void
   onMenu?: (block: Block, x: number, y: number) => void
+  onCreate?: (start: Date, minutes: number, title: string) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
   const [grab, setGrab] = useState<Grab | null>(null)
   const [preview, setPreview] = useState<{ start: Date; end: Date } | null>(null)
+  // the window handlers close over one `grab`; the latest preview must come
+  // from a ref or pointerup commits a stale position
+  const previewRef = useRef<{ start: Date; end: Date } | null>(null)
+  // the drag effect must depend on `grab` alone: re-registering window
+  // listeners on every render would tear them down mid-gesture
+  const daysRef = useRef(days)
+  const rescheduleRef = useRef(onReschedule)
+  useEffect(() => {
+    daysRef.current = days
+    rescheduleRef.current = onReschedule
+  })
   const holdTarget = useRef<Block | null>(null)
+  const [draft, setDraft] = useState<{ day: TimelineDay; start: Date; top: number } | null>(
+    null,
+  )
+  const [draftTitle, setDraftTitle] = useState('')
   const hold = useLongPress((x, y) => {
     // a hold is not a drag: drop whatever the pointer had picked up
     setGrab(null)
@@ -96,34 +119,16 @@ export default function Timeline({
     if (!column) return
     const height = column.getBoundingClientRect().height
     if (height <= 0) return
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     setGrab({
       block,
       mode,
       originY: e.clientY,
       msPerPx: (day.end.getTime() - day.start.getTime()) / height,
+      originDay: day,
       start: block.start,
       end: block.end ?? now,
     })
     setPreview({ start: block.start, end: block.end ?? now })
-  }
-
-  function moveDrag(e: ReactPointerEvent<HTMLElement>) {
-    if (!grab) return
-    const deltaMs = (e.clientY - grab.originY) * grab.msPerPx
-    setPreview(dragBlock(grab.start, grab.end, deltaMs, grab.mode))
-  }
-
-  function endDrag(e: ReactPointerEvent<HTMLElement>) {
-    if (grab && preview) {
-      const moved =
-        preview.start.getTime() !== grab.start.getTime() ||
-        preview.end.getTime() !== grab.end.getTime()
-      if (moved) onReschedule?.(grab.block, preview.start, preview.end)
-    }
-    ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
-    setGrab(null)
-    setPreview(null)
   }
 
   const todayCol = days.find((d) => d.isToday)
@@ -139,6 +144,69 @@ export default function Timeline({
     el.scrollTop = Math.max(0, marker * body.offsetHeight - el.clientHeight / 2)
     scrolled.current = true
   }, [marker])
+
+  /*
+   * The gesture is tracked on the window rather than on the block.
+   *
+   * Dragging sideways moves the block into a different day column, which
+   * unmounts and remounts it — taking any pointer capture with it, so the drag
+   * would go dead the moment it crossed a column and never commit. The window
+   * does not care where the element went.
+   */
+  useEffect(() => {
+    if (!grab) return
+
+    /** Which day column the pointer is currently over, if any. */
+    const dayUnder = (clientX: number): TimelineDay | null => {
+      const cols = scroller.current?.querySelectorAll('.tl-col')
+      if (!cols) return null
+      for (let i = 0; i < cols.length; i++) {
+        const r = cols[i].getBoundingClientRect()
+        if (clientX >= r.left && clientX <= r.right) return daysRef.current[i] ?? null
+      }
+      return null
+    }
+
+    const onMove = (e: PointerEvent) => {
+      let deltaMs = (e.clientY - grab.originY) * grab.msPerPx
+
+      // The shift is the gap between the two columns' starts rather than a flat
+      // 24h, so a block keeps its offset from midnight across a daylight-saving
+      // change instead of sliding an hour.
+      if (grab.mode === 'move') {
+        const target = dayUnder(e.clientX)
+        if (target) {
+          deltaMs += target.start.getTime() - grab.originDay.start.getTime()
+        }
+      }
+
+      const next = dragBlock(grab.start, grab.end, deltaMs, grab.mode)
+      previewRef.current = next
+      setPreview(next)
+    }
+
+    const onUp = () => {
+      const next = previewRef.current
+      if (next) {
+        const moved =
+          next.start.getTime() !== grab.start.getTime() ||
+          next.end.getTime() !== grab.end.getTime()
+        if (moved) rescheduleRef.current?.(grab.block, next.start, next.end)
+      }
+      previewRef.current = null
+      setGrab(null)
+      setPreview(null)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [grab])
 
   return (
     <div className="timeline" ref={scroller}>
@@ -185,7 +253,26 @@ export default function Timeline({
               : blocks
             const positioned = layoutDay(shown, d.start, d.end, now)
             return (
-              <div key={d.key} className={d.isToday ? 'tl-col is-today' : 'tl-col'}>
+              <div
+                key={d.key}
+                className={d.isToday ? 'tl-col is-today' : 'tl-col'}
+                onClick={(e) => {
+                  // only empty track, never a block or its controls
+                  if (!onCreate || e.target !== e.currentTarget) return
+                  const r = e.currentTarget.getBoundingClientRect()
+                  const span = d.end.getTime() - d.start.getTime()
+                  const at = snap(
+                    d.start.getTime() + ((e.clientY - r.top) / r.height) * span,
+                    NEW_BLOCK_SNAP_MINUTES,
+                  )
+                  setDraft({
+                    day: d,
+                    start: new Date(at),
+                    top: (at - d.start.getTime()) / span,
+                  })
+                  setDraftTitle('')
+                }}
+              >
                 {HOURS.map((h) => (
                   <div key={h} className="hour" style={{ top: `${(h / 24) * 100}%` }} />
                 ))}
@@ -228,18 +315,9 @@ export default function Timeline({
                         holdTarget.current = block
                         beginDrag(e, block, 'move', d)
                       }}
-                      onPointerMove={(e) => {
-                        hold.onPointerMove(e)
-                        moveDrag(e)
-                      }}
-                      onPointerUp={(e) => {
-                        hold.onPointerUp()
-                        endDrag(e)
-                      }}
-                      onPointerCancel={(e) => {
-                        hold.onPointerCancel()
-                        endDrag(e)
-                      }}
+                      onPointerMove={hold.onPointerMove}
+                      onPointerUp={hold.onPointerUp}
+                      onPointerCancel={hold.onPointerCancel}
                     >
                       <span className="block-title">{block.title}</span>
                       <span className="block-time">{range}</span>
@@ -249,16 +327,10 @@ export default function Timeline({
                           <span
                             className="grab-edge top"
                             onPointerDown={(e) => beginDrag(e, block, 'start', d)}
-                            onPointerMove={moveDrag}
-                            onPointerUp={endDrag}
-                            onPointerCancel={endDrag}
                           />
                           <span
                             className="grab-edge bottom"
                             onPointerDown={(e) => beginDrag(e, block, 'end', d)}
-                            onPointerMove={moveDrag}
-                            onPointerUp={endDrag}
-                            onPointerCancel={endDrag}
                           />
                         </>
                       )}
@@ -280,6 +352,40 @@ export default function Timeline({
                     </div>
                   )
                 })}
+
+                {draft && draft.day.key === d.key && (
+                  <form
+                    className="draft"
+                    style={{
+                      top: `${draft.top * 100}%`,
+                      height: `${(NEW_BLOCK_MINUTES / (24 * 60)) * 100}%`,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      const t = draftTitle.trim()
+                      if (t) onCreate?.(draft.start, NEW_BLOCK_MINUTES, t)
+                      setDraft(null)
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      value={draftTitle}
+                      placeholder={formatRange(
+                        draft.start,
+                        new Date(draft.start.getTime() + NEW_BLOCK_MINUTES * 60_000),
+                        tz,
+                      )}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Escape' && setDraft(null)}
+                      onBlur={() => {
+                        const t = draftTitle.trim()
+                        if (t) onCreate?.(draft.start, NEW_BLOCK_MINUTES, t)
+                        setDraft(null)
+                      }}
+                    />
+                  </form>
+                )}
 
                 {d.isToday && marker !== null && (
                   <div className="now" style={{ top: `${marker * 100}%` }} />

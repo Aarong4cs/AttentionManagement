@@ -123,6 +123,35 @@ export default function Today({ email }: { email: string }) {
     enqueue({ op: 'createTask', at: new Date().toISOString(), task })
   }
 
+  /** A click on empty track: a scheduled block, so it lands on the timeline. */
+  function onCreateAt(start: Date, minutes: number, title: string) {
+    const at = new Date().toISOString()
+    enqueue({
+      op: 'createTask',
+      at,
+      task: {
+        id: newId(),
+        user_id: snap.profile?.id ?? '',
+        title,
+        notes: null,
+        due_at: start.toISOString(),
+        estimated_minutes: minutes,
+        rank: rankAppend(snap.tasks.map((x) => x.rank)),
+        completed_at: null,
+        deleted_at: null,
+        recurrence_id: null,
+        occurrence_date: null,
+        detached: false,
+        // mirrors the trigger, so the block draws at its full height at once
+        scheduled_end: new Date(start.getTime() + minutes * 60_000).toISOString(),
+        color: null,
+        priority: null,
+        created_at: at,
+        updated_at: at,
+      },
+    })
+  }
+
   function toggle(task: Task) {
     const at = new Date().toISOString()
     const running = snap.running
@@ -276,9 +305,6 @@ export default function Today({ email }: { email: string }) {
         </div>
 
         <div className="bar-right">
-          <button className="link" onClick={() => setShowRules(true)}>
-            repeating
-          </button>
           <button
             className="link"
             onClick={() => {
@@ -342,6 +368,7 @@ export default function Today({ email }: { email: string }) {
             onReschedule={onReschedule}
             onDelete={onDeleteBlock}
             onMenu={openBlockMenu}
+            onCreate={onCreateAt}
           />
         </section>
 

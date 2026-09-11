@@ -370,6 +370,8 @@ input[type='checkbox'] {
   left: 0;
   right: 0;
   border-top: 1px solid var(--line);
+  /* decoration: it must not swallow a click meant for the track behind it */
+  pointer-events: none;
 }
 
 .hour-label,
@@ -986,4 +988,38 @@ input[type='number'] {
 }
 .prio.none.on {
   background: var(--muted);
+}
+
+/* click empty track to create ------------------------------------------ */
+
+.tl-col {
+  cursor: copy;
+}
+.tl-col .block,
+.tl-col .draft {
+  cursor: default;
+}
+
+.draft {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 1.4rem;
+  padding: 0.1rem;
+  border-radius: 5px;
+  border: 1px dashed var(--sched-line);
+  background: var(--sched-bg);
+  z-index: 5;
+}
+.draft input {
+  width: 100%;
+  padding: 0.15rem 0.3rem;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+}
+.draft input:focus {
+  outline: none;
 }
