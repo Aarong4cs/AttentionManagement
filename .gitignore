@@ -29,3 +29,7 @@ dist-ssr
 
 # Vercel CLI link file
 .vercel
+
+# never commit an env file — except the example that documents the names
+.env*
+!.env.example
