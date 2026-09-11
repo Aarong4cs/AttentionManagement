@@ -10,8 +10,16 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const API = 'https://www.googleapis.com/calendar/v3'
 
-/** Read-only, and nothing more: this integration never writes to Google. */
-export const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly'
+/**
+ * Read-only on the user's own calendars, and write access ONLY to calendars
+ * this app created. `calendar.app.created` cannot touch an existing calendar at
+ * all, so a bug here can never damage real appointments — which a blanket
+ * `calendar` scope would happily allow.
+ */
+export const SCOPE = [
+  'https://www.googleapis.com/auth/calendar.readonly',
+  'https://www.googleapis.com/auth/calendar.app.created',
+].join(' ')
 
 const clientId = () => process.env.GOOGLE_CLIENT_ID ?? ''
 const clientSecret = () => process.env.GOOGLE_CLIENT_SECRET ?? ''
@@ -141,4 +149,114 @@ export async function listCalendars(
       summary: String(c.summaryOverride ?? c.summary ?? c.id),
       primary: c.primary === true,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// writing, but only to a calendar this app made
+// ---------------------------------------------------------------------------
+
+/** Raised when the stored grant predates the write scope. */
+export class NeedsReconsent extends Error {}
+
+async function write(
+  token: string,
+  path: string,
+  method: 'POST' | 'PUT' | 'DELETE',
+  body?: unknown,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      ...(body ? { 'content-type': 'application/json' } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  // 404 on a delete means the user already removed it in Google; that is the
+  // outcome we wanted, not a failure.
+  if (method === 'DELETE' && (res.ok || res.status === 404 || res.status === 410)) {
+    return {}
+  }
+  if (res.status === 401 || res.status === 403) {
+    throw new NeedsReconsent(
+      'Google refused the write. Reconnect to grant calendar access.',
+    )
+  }
+  if (!res.ok) {
+    throw new Error(`${method} ${path} ${res.status}: ${(await res.text()).slice(0, 300)}`)
+  }
+  return (await res.json()) as Record<string, unknown>
+}
+
+export async function createAppCalendar(
+  token: string,
+  summary: string,
+  timeZone: string,
+): Promise<string> {
+  const made = await write(token, '/calendars', 'POST', {
+    summary,
+    description: 'Time tracked in Attention Management. Written by the app.',
+    timeZone,
+  })
+  const id = made.id
+  if (typeof id !== 'string') throw new Error('calendar insert returned no id')
+  return id
+}
+
+/** Does this calendar still exist? A user can delete it in Google at any time. */
+export async function calendarExists(token: string, calendarId: string): Promise<boolean> {
+  const res = await fetch(`${API}/calendars/${encodeURIComponent(calendarId)}`, {
+    headers: { authorization: `Bearer ${token}` },
+  })
+  return res.ok
+}
+
+export async function insertEvent(
+  token: string,
+  calendarId: string,
+  event: { summary: string; start: string; end: string },
+): Promise<string> {
+  const made = await write(
+    token,
+    `/calendars/${encodeURIComponent(calendarId)}/events`,
+    'POST',
+    {
+      summary: event.summary,
+      start: { dateTime: event.start },
+      end: { dateTime: event.end },
+    },
+  )
+  const id = made.id
+  if (typeof id !== 'string') throw new Error('event insert returned no id')
+  return id
+}
+
+export async function updateEvent(
+  token: string,
+  calendarId: string,
+  eventId: string,
+  event: { summary: string; start: string; end: string },
+): Promise<void> {
+  await write(
+    token,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    'PUT',
+    {
+      summary: event.summary,
+      start: { dateTime: event.start },
+      end: { dateTime: event.end },
+    },
+  )
+}
+
+export async function deleteEvent(
+  token: string,
+  calendarId: string,
+  eventId: string,
+): Promise<void> {
+  await write(
+    token,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    'DELETE',
+  )
 }

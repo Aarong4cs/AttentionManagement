@@ -5,6 +5,7 @@ import {
   listEvents,
 } from '../_lib/google.ts'
 import { mapEvent, syncWindow, windowChanged, type GoogleEvent } from '../../src/lib/gcal.ts'
+import { pushEntries } from '../_lib/push.ts'
 
 interface CalendarRow {
   calendar_id: string
@@ -28,20 +29,23 @@ export async function POST(req: Request): Promise<Response> {
   const db = admin()
   const { data: conn } = await db
     .from('google_connections')
-    .select('refresh_token')
+    .select('refresh_token, app_calendar_id, push_enabled')
     .eq('user_id', userId)
     .maybeSingle()
   if (!conn) return json({ connected: false, synced: 0 })
+
+  const { data: profile } = await db
+    .from('profiles')
+    .select('timezone')
+    .eq('id', userId)
+    .maybeSingle()
+  const timeZone = profile?.timezone ?? 'UTC'
 
   const { data: calendars } = await db
     .from('google_calendars')
     .select('calendar_id, summary, sync_token, window_start, window_end')
     .eq('user_id', userId)
     .eq('enabled', true)
-  if (!calendars || calendars.length === 0) {
-    return json({ connected: true, synced: 0, calendars: 0 })
-  }
-
   let token: string
   try {
     token = await accessToken(conn.refresh_token)
@@ -50,6 +54,15 @@ export async function POST(req: Request): Promise<Response> {
       { connected: true, expired: true, error: e instanceof Error ? e.message : String(e) },
       200,
     )
+  }
+
+  // Pushing runs even with no calendars ticked: the two directions are
+  // independent, and someone may want to send their tracked time out without
+  // pulling anything in.
+  const push = await pushEntries(db, userId, token, conn, timeZone)
+
+  if (!calendars || calendars.length === 0) {
+    return json({ connected: true, written: 0, removed: 0, calendars: 0, push })
   }
 
   const window = syncWindow(new Date())
@@ -68,7 +81,7 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  return json({ connected: true, written, removed, failures })
+  return json({ connected: true, written, removed, failures, push })
 }
 
 async function syncCalendar(

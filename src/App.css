@@ -1118,3 +1118,12 @@ button.title:hover {
 .check.grow .rule-text {
   margin-left: 0.1rem;
 }
+
+.push {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.push .rule-text .muted {
+  font-size: 0.75rem;
+}

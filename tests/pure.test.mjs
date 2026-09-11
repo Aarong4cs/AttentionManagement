@@ -400,6 +400,7 @@ check('startTrail does not duplicate an entry already in the snapshot', () => {
     ended_at: null, edited_at: null, deleted_at: null,
     created_at: 'x', updated_at: 'x', duration_seconds: null,
     title: 'a', taskCompleted: false, color: null,
+    google_event_id: null, google_synced_at: null,
   }
   const op = { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a',
                startedAt: '2026-06-10T09:00:00Z' }
@@ -413,6 +414,7 @@ check('a stopped entry from the server is not resurrected as running', () => {
     ended_at: '2026-06-10T10:00:00Z', edited_at: null, deleted_at: null,
     created_at: 'x', updated_at: 'x', duration_seconds: 3600,
     title: 'a', taskCompleted: false, color: null,
+    google_event_id: null, google_synced_at: null,
   }
   const s = applyOps(snap({ tasks: [task('a')], entries: [stopped] }), [
     { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' },
@@ -531,6 +533,62 @@ check('handles a December window rolling into next year', () => {
   const w = syncWindow(D('2026-12-15T00:00:00Z'))
   assert.equal(w.windowStart, '2026-11-01')
   assert.equal(w.windowEnd, '2027-03-31')
+})
+
+
+
+import { pushAction } from '../src/lib/gcal.ts'
+
+console.log('\npushing tracked time out')
+const entry = (over = {}) => ({
+  id: 'e1', started_at: '2026-06-10T13:00:00Z', ended_at: '2026-06-10T14:00:00Z',
+  deleted_at: null, updated_at: '2026-06-10T14:00:00Z',
+  google_event_id: null, google_synced_at: null,
+  title: 'Deep work', taskUpdatedAt: '2026-06-10T12:00:00Z', ...over,
+})
+
+check('a finished block that was never pushed is created', () => {
+  const a = pushAction(entry())
+  assert.equal(a.kind, 'create')
+  assert.equal(a.summary, 'Deep work')
+  assert.equal(a.start, '2026-06-10T13:00:00Z')
+})
+check('a running timer is not pushed', () => {
+  assert.equal(pushAction(entry({ ended_at: null })).kind, 'skip')
+})
+check('an unchanged block that is already pushed is skipped', () => {
+  const a = pushAction(entry({
+    google_event_id: 'g1', google_synced_at: '2026-06-10T15:00:00Z' }))
+  assert.equal(a.kind, 'skip')
+})
+check('a corrected block is updated', () => {
+  const a = pushAction(entry({
+    google_event_id: 'g1', google_synced_at: '2026-06-10T14:30:00Z',
+    updated_at: '2026-06-10T16:00:00Z', ended_at: '2026-06-10T14:45:00Z' }))
+  assert.equal(a.kind, 'update')
+  assert.equal(a.eventId, 'g1')
+  assert.equal(a.end, '2026-06-10T14:45:00Z')
+})
+check('RENAMING THE TASK also updates the pushed event', () => {
+  // the entry itself did not change; only the task it belongs to did
+  const a = pushAction(entry({
+    google_event_id: 'g1', google_synced_at: '2026-06-10T15:00:00Z',
+    title: 'Renamed', taskUpdatedAt: '2026-06-10T17:00:00Z' }))
+  assert.equal(a.kind, 'update', 'or the pushed copy keeps the old name forever')
+  assert.equal(a.summary, 'Renamed')
+})
+check('a deleted block removes its pushed event', () => {
+  const a = pushAction(entry({ deleted_at: '2026-06-10T18:00:00Z', google_event_id: 'g1' }))
+  assert.equal(a.kind, 'delete')
+  assert.equal(a.eventId, 'g1')
+})
+check('a deleted block that was never pushed needs nothing', () => {
+  assert.equal(pushAction(entry({ deleted_at: '2026-06-10T18:00:00Z' })).kind, 'skip')
+})
+check('a deleted running timer is still a delete, not a skip', () => {
+  const a = pushAction(entry({
+    ended_at: null, deleted_at: '2026-06-10T18:00:00Z', google_event_id: 'g1' }))
+  assert.equal(a.kind, 'delete', 'deletion outranks being unfinished')
 })
 
 console.log(`\n${n} assertions passed\n`)

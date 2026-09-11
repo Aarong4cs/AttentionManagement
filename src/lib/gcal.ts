@@ -126,3 +126,87 @@ export function mapEvent(event: GoogleEvent): Mapped {
     },
   }
 }
+
+// ---------------------------------------------------------------------------
+// pushing tracked time out
+// ---------------------------------------------------------------------------
+
+/** The name of the calendar this app creates in Google. */
+export const PUSH_CALENDAR_NAME = 'Attention Management'
+
+export interface PushableEntry {
+  id: string
+  started_at: string
+  ended_at: string | null
+  deleted_at: string | null
+  updated_at: string
+  google_event_id: string | null
+  google_synced_at: string | null
+  /** The task's title and its own updated_at, since the event carries the name. */
+  title: string
+  taskUpdatedAt: string
+}
+
+export type PushAction =
+  | { kind: 'create'; entryId: string; summary: string; start: string; end: string }
+  | {
+      kind: 'update'
+      entryId: string
+      eventId: string
+      summary: string
+      start: string
+      end: string
+    }
+  | { kind: 'delete'; entryId: string; eventId: string }
+  | { kind: 'skip'; entryId: string; why: string }
+
+/**
+ * What, if anything, this entry needs doing in Google.
+ *
+ * Pure, so every branch is testable without touching an API. The awkward one is
+ * renaming: the event carries the task's title, but renaming a task does not
+ * touch the entry's own updated_at, so comparing only that would leave the
+ * pushed copy showing the old name forever. Both timestamps are considered.
+ */
+export function pushAction(entry: PushableEntry): PushAction {
+  if (entry.deleted_at !== null) {
+    return entry.google_event_id
+      ? { kind: 'delete', entryId: entry.id, eventId: entry.google_event_id }
+      : { kind: 'skip', entryId: entry.id, why: 'deleted and never pushed' }
+  }
+
+  // A running timer has no end. Pushing it would mean rewriting the same event
+  // every few seconds for a number nobody is watching in Google.
+  if (entry.ended_at === null) {
+    return { kind: 'skip', entryId: entry.id, why: 'still running' }
+  }
+
+  const changedAt = Math.max(
+    Date.parse(entry.updated_at),
+    Date.parse(entry.taskUpdatedAt),
+  )
+  const syncedAt = entry.google_synced_at ? Date.parse(entry.google_synced_at) : null
+
+  if (entry.google_event_id === null) {
+    return {
+      kind: 'create',
+      entryId: entry.id,
+      summary: entry.title,
+      start: entry.started_at,
+      end: entry.ended_at,
+    }
+  }
+
+  if (syncedAt !== null && changedAt <= syncedAt) {
+    return { kind: 'skip', entryId: entry.id, why: 'already in step' }
+  }
+
+  return {
+    kind: 'update',
+    entryId: entry.id,
+    eventId: entry.google_event_id,
+    summary: entry.title,
+    start: entry.started_at,
+    end: entry.ended_at,
+  }
+}

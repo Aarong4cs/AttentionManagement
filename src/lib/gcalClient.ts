@@ -19,6 +19,8 @@ export interface CalendarRow {
 export interface CalendarState {
   connected: boolean
   expired?: boolean
+  pushEnabled?: boolean
+  hasPushCalendar?: boolean
   calendars: CalendarRow[]
   error?: string
 }
@@ -57,6 +59,13 @@ export interface SyncResult {
   written?: number
   removed?: number
   failures?: string[]
+  push?: {
+    created: number
+    updated: number
+    deleted: number
+    reconsent?: boolean
+    error?: string
+  }
 }
 
 export const syncNow = () =>
@@ -72,3 +81,14 @@ export async function setCalendarEnabled(
     .eq('calendar_id', calendarId)
   if (error) throw error
 }
+
+/**
+ * Turn pushing on or off. Not a table update like the calendar checkboxes,
+ * because the flag lives on google_connections, which the client cannot read.
+ */
+export const setPushEnabled = (enabled: boolean) =>
+  call<{ push_enabled: boolean }>('/api/google/push', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })

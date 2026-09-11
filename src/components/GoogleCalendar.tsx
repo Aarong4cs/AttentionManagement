@@ -4,6 +4,7 @@ import {
   disconnect,
   getCalendars,
   setCalendarEnabled,
+  setPushEnabled,
   syncNow,
   type CalendarState,
 } from '../lib/gcalClient'
@@ -121,6 +122,36 @@ export default function GoogleCalendar({
               </ul>
             )}
 
+            <div className="push">
+              <label className="check grow">
+                <input
+                  type="checkbox"
+                  checked={state.pushEnabled === true}
+                  disabled={busy}
+                  onChange={async (e) => {
+                    setBusy(true)
+                    try {
+                      await setPushEnabled(e.target.checked)
+                      await load()
+                      if (e.target.checked) await syncNow()
+                      onChanged()
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setBusy(false)
+                    }
+                  }}
+                />
+                <span className="rule-text">
+                  <span className="title">Send my tracked time to Google</span>
+                  <span className="muted">
+                    Creates a separate “Attention Management” calendar. Nothing
+                    is written to your own calendars.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <div className="row">
               <button
                 disabled={busy}
@@ -128,7 +159,13 @@ export default function GoogleCalendar({
                   setBusy(true)
                   try {
                     const r = await syncNow()
-                    if (r.failures?.length) setError(r.failures.join('; '))
+                    const trouble = [
+                      ...(r.failures ?? []),
+                      r.push?.reconsent
+                        ? 'Reconnect to allow writing to Google.'
+                        : (r.push?.error ?? ''),
+                    ].filter(Boolean)
+                    if (trouble.length) setError(trouble.join('; '))
                     await load()
                     onChanged()
                   } catch (e) {
@@ -139,6 +176,24 @@ export default function GoogleCalendar({
                 }}
               >
                 Sync now
+              </button>
+              {/*
+                Re-granting scopes must not mean disconnecting: that would drop
+                every mirrored row and pull the whole calendar again. Connecting
+                over an existing link just replaces the refresh token.
+              */}
+              <button
+                className="link"
+                disabled={busy}
+                onClick={async () => {
+                  try {
+                    window.location.href = await connectUrl()
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : String(e))
+                  }
+                }}
+              >
+                reconnect
               </button>
               <button
                 className="link"

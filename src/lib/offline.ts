@@ -176,6 +176,9 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
           title: task?.title ?? '',
           taskCompleted: task?.completed_at != null,
           color: task?.color ?? null,
+          // an optimistic entry has never been pushed anywhere
+          google_event_id: null,
+          google_synced_at: null,
         }
         s.entries = [...s.entries, entry]
         s.running = entry

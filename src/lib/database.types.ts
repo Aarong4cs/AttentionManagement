@@ -80,22 +80,28 @@ export type Database = {
       }
       google_connections: {
         Row: {
+          app_calendar_id: string | null
           connected_at: string
           google_email: string | null
+          push_enabled: boolean
           refresh_token: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          app_calendar_id?: string | null
           connected_at?: string
           google_email?: string | null
+          push_enabled?: boolean
           refresh_token: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          app_calendar_id?: string | null
           connected_at?: string
           google_email?: string | null
+          push_enabled?: boolean
           refresh_token?: string
           updated_at?: string
           user_id?: string
@@ -264,6 +270,8 @@ export type Database = {
           duration_seconds: number | null
           edited_at: string | null
           ended_at: string | null
+          google_event_id: string | null
+          google_synced_at: string | null
           id: string
           started_at: string
           task_id: string
@@ -276,6 +284,8 @@ export type Database = {
           duration_seconds?: number | null
           edited_at?: string | null
           ended_at?: string | null
+          google_event_id?: string | null
+          google_synced_at?: string | null
           id?: string
           started_at: string
           task_id: string
@@ -288,6 +298,8 @@ export type Database = {
           duration_seconds?: number | null
           edited_at?: string | null
           ended_at?: string | null
+          google_event_id?: string | null
+          google_synced_at?: string | null
           id?: string
           started_at?: string
           task_id?: string

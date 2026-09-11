@@ -9,7 +9,7 @@ export async function GET(req: Request): Promise<Response> {
   const db = admin()
   const { data: conn } = await db
     .from('google_connections')
-    .select('refresh_token')
+    .select('refresh_token, push_enabled, app_calendar_id')
     .eq('user_id', userId)
     .maybeSingle()
   if (!conn) return json({ connected: false, calendars: [] })
@@ -35,5 +35,10 @@ export async function GET(req: Request): Promise<Response> {
     .select('calendar_id, summary, enabled, last_synced_at')
     .eq('user_id', userId)
     .order('summary')
-  return json({ connected: true, calendars: data ?? [] })
+  return json({
+    connected: true,
+    pushEnabled: conn.push_enabled === true,
+    hasPushCalendar: conn.app_calendar_id !== null,
+    calendars: data ?? [],
+  })
 }
