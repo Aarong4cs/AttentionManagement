@@ -210,3 +210,45 @@ export function pushAction(entry: PushableEntry): PushAction {
     end: entry.ended_at,
   }
 }
+
+/**
+ * A scheduled task in the shape the push already understands.
+ *
+ * A block on the timeline is due_at plus a duration, which is the same interval
+ * a trailed entry describes with two timestamps — so it reuses pushAction
+ * rather than growing a second copy of the same decisions.
+ *
+ * Returns null for anything that is not a block of ours: a sequence task has no
+ * time to put in a calendar, and a mirrored Google event must never be sent
+ * back, which would duplicate every appointment the user already has.
+ */
+export function taskAsPushable(task: {
+  id: string
+  title: string
+  due_at: string | null
+  estimated_minutes: number | null
+  source: string | null
+  deleted_at: string | null
+  updated_at: string
+  google_event_id: string | null
+  google_synced_at: string | null
+}): PushableEntry | null {
+  if (task.source !== null) return null
+  if (!task.due_at || !task.estimated_minutes) return null
+
+  const start = Date.parse(task.due_at)
+  if (Number.isNaN(start)) return null
+
+  return {
+    id: task.id,
+    started_at: task.due_at,
+    ended_at: new Date(start + task.estimated_minutes * 60_000).toISOString(),
+    deleted_at: task.deleted_at,
+    updated_at: task.updated_at,
+    google_event_id: task.google_event_id,
+    google_synced_at: task.google_synced_at,
+    title: task.title,
+    // a task is its own source of truth for its name
+    taskUpdatedAt: task.updated_at,
+  }
+}

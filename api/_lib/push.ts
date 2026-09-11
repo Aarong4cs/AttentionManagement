@@ -14,7 +14,12 @@ import {
   insertEvent,
   updateEvent,
 } from './google.ts'
-import { PUSH_CALENDAR_NAME, pushAction, type PushableEntry } from '../../src/lib/gcal.ts'
+import {
+  PUSH_CALENDAR_NAME,
+  pushAction,
+  taskAsPushable,
+  type PushableEntry,
+} from '../../src/lib/gcal.ts'
 import type { admin } from './auth.ts'
 
 type Db = ReturnType<typeof admin>
@@ -113,20 +118,62 @@ export async function pushEntries(
     return { ...result, error: e instanceof Error ? e.message : String(e) }
   }
 
-  for (const row of rows) {
-    const entry: PushableEntry = {
-      id: row.id,
-      started_at: row.started_at,
-      ended_at: row.ended_at,
-      deleted_at: row.deleted_at,
-      updated_at: row.updated_at,
-      google_event_id: row.google_event_id,
-      google_synced_at: row.google_synced_at,
-      title: row.tasks?.title ?? 'Tracked time',
-      taskUpdatedAt: row.tasks?.updated_at ?? row.updated_at,
-    }
+  const entries: PushableEntry[] = rows.map((row) => ({
+    id: row.id,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    deleted_at: row.deleted_at,
+    updated_at: row.updated_at,
+    google_event_id: row.google_event_id,
+    google_synced_at: row.google_synced_at,
+    title: row.tasks?.title ?? 'Tracked time',
+    taskUpdatedAt: row.tasks?.updated_at ?? row.updated_at,
+  }))
+  try {
+    await applyAll(db, 'time_entries', entries, token, calendarId, result, 'Tracked')
 
-    const action = pushAction(entry)
+  // Blocks on the timeline. taskAsPushable drops sequence tasks, which have no
+  // time, and mirrored Google events, which would otherwise be sent straight
+  // back and duplicate every appointment already there.
+  const { data: taskRows } = await db
+    .from('tasks')
+    .select(
+      'id, title, due_at, estimated_minutes, source, deleted_at, updated_at, google_event_id, google_synced_at',
+    )
+    .eq('user_id', userId)
+    .is('source', null)
+    .not('due_at', 'is', null)
+    .order('due_at', { ascending: false })
+    .limit(500)
+
+  const tasks = (taskRows ?? [])
+    .map((t) => taskAsPushable(t))
+    .filter((t): t is PushableEntry => t !== null)
+    await applyAll(db, 'tasks', tasks, token, calendarId, result, 'Planned')
+  } catch (e) {
+    if (e instanceof NeedsReconsent) return { ...result, reconsent: true, error: e.message }
+    return { ...result, error: e instanceof Error ? e.message : String(e) }
+  }
+
+  return result
+}
+
+/**
+ * Send one collection. `table` is where the event id is recorded, which is the
+ * only thing that differs between tracked time and scheduled blocks — the
+ * decisions themselves are the same and live in pushAction.
+ */
+async function applyAll(
+  db: Db,
+  table: 'time_entries' | 'tasks',
+  items: PushableEntry[],
+  token: string,
+  calendarId: string,
+  result: PushResult,
+  kind: 'Tracked' | 'Planned',
+): Promise<void> {
+  for (const item of items) {
+    const action = pushAction(item)
     if (action.kind === 'skip') continue
 
     try {
@@ -135,35 +182,33 @@ export async function pushEntries(
           summary: action.summary,
           start: action.start,
           end: action.end,
+          description: `${kind} in Attention Management.`,
         })
-        await stamp(db, action.entryId, eventId)
+        await stamp(db, table, action.entryId, eventId)
         result.created++
       } else if (action.kind === 'update') {
         await updateEvent(token, calendarId, action.eventId, {
           summary: action.summary,
           start: action.start,
           end: action.end,
+          description: `${kind} in Attention Management.`,
         })
-        await stamp(db, action.entryId, action.eventId)
+        await stamp(db, table, action.entryId, action.eventId)
         result.updated++
       } else {
         await deleteEvent(token, calendarId, action.eventId)
         await db
-          .from('time_entries')
+          .from(table)
           .update({ google_event_id: null, google_synced_at: null })
           .eq('id', action.entryId)
         result.deleted++
       }
     } catch (e) {
-      if (e instanceof NeedsReconsent) {
-        return { ...result, reconsent: true, error: e.message }
-      }
-      // One bad row must not strand the rest; it will be retried next pass.
+      if (e instanceof NeedsReconsent) throw e
+      // One bad row must not strand the rest; it is retried next pass.
       result.error = e instanceof Error ? e.message : String(e)
     }
   }
-
-  return result
 }
 
 /**
@@ -174,9 +219,14 @@ export async function pushEntries(
  * stamping a row would make it look changed again the instant it was recorded,
  * and every finished entry would be re-pushed on every pass for ever.
  */
-async function stamp(db: Db, entryId: string, eventId: string): Promise<void> {
+async function stamp(
+  db: Db,
+  table: 'time_entries' | 'tasks',
+  entryId: string,
+  eventId: string,
+): Promise<void> {
   await db
-    .from('time_entries')
+    .from(table)
     .update({ google_event_id: eventId, google_synced_at: new Date().toISOString() })
     .eq('id', entryId)
 }

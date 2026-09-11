@@ -214,7 +214,7 @@ export async function calendarExists(token: string, calendarId: string): Promise
 export async function insertEvent(
   token: string,
   calendarId: string,
-  event: { summary: string; start: string; end: string },
+  event: { summary: string; start: string; end: string; description?: string },
 ): Promise<string> {
   const made = await write(
     token,
@@ -222,6 +222,7 @@ export async function insertEvent(
     'POST',
     {
       summary: event.summary,
+      description: event.description,
       start: { dateTime: event.start },
       end: { dateTime: event.end },
     },
@@ -235,7 +236,7 @@ export async function updateEvent(
   token: string,
   calendarId: string,
   eventId: string,
-  event: { summary: string; start: string; end: string },
+  event: { summary: string; start: string; end: string; description?: string },
 ): Promise<void> {
   await write(
     token,
@@ -243,6 +244,7 @@ export async function updateEvent(
     'PUT',
     {
       summary: event.summary,
+      description: event.description,
       start: { dateTime: event.start },
       end: { dateTime: event.end },
     },

@@ -195,6 +195,8 @@ export type Database = {
           external_calendar: string | null
           external_etag: string | null
           external_id: string | null
+          google_event_id: string | null
+          google_synced_at: string | null
           id: string
           notes: string | null
           occurrence_date: string | null
@@ -218,6 +220,8 @@ export type Database = {
           external_calendar?: string | null
           external_etag?: string | null
           external_id?: string | null
+          google_event_id?: string | null
+          google_synced_at?: string | null
           id?: string
           notes?: string | null
           occurrence_date?: string | null
@@ -241,6 +245,8 @@ export type Database = {
           external_calendar?: string | null
           external_etag?: string | null
           external_id?: string | null
+          google_event_id?: string | null
+          google_synced_at?: string | null
           id?: string
           notes?: string | null
           occurrence_date?: string | null

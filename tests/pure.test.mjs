@@ -201,6 +201,7 @@ const task = (id, over = {}) => ({
   id, user_id: 'u', title: id, notes: null, due_at: null, estimated_minutes: null,
   rank: id, completed_at: null, deleted_at: null, recurrence_id: null,
   occurrence_date: null, detached: false, scheduled_end: null, color: null, priority: null,
+  google_event_id: null, google_synced_at: null, source: null,
   created_at: '2026-06-10T00:00:00Z', updated_at: '2026-06-10T00:00:00Z', ...over,
 })
 const snap = (over = {}) => ({ ...emptySnapshot, ...over })
@@ -589,6 +590,43 @@ check('a deleted running timer is still a delete, not a skip', () => {
   const a = pushAction(entry({
     ended_at: null, deleted_at: '2026-06-10T18:00:00Z', google_event_id: 'g1' }))
   assert.equal(a.kind, 'delete', 'deletion outranks being unfinished')
+})
+
+
+
+import { taskAsPushable } from '../src/lib/gcal.ts'
+
+console.log('\nscheduled blocks as pushable')
+const sched = (over = {}) => ({
+  id: 't1', title: 'Standup', due_at: '2026-06-10T13:00:00Z', estimated_minutes: 30,
+  source: null, deleted_at: null, updated_at: '2026-06-10T12:00:00Z',
+  google_event_id: null, google_synced_at: null, ...over,
+})
+
+check('a block on the timeline becomes a pushable interval', () => {
+  const p = taskAsPushable(sched())
+  assert.equal(p.started_at, '2026-06-10T13:00:00Z')
+  assert.equal(p.ended_at, '2026-06-10T13:30:00.000Z', 'due_at plus the estimate')
+  assert.equal(pushAction(p).kind, 'create')
+})
+check('a MIRRORED google event is never sent back', () => {
+  // otherwise every appointment already in Google would be duplicated
+  assert.equal(taskAsPushable(sched({ source: 'google' })), null)
+})
+check('a sequence task has no time to put in a calendar', () => {
+  assert.equal(taskAsPushable(sched({ due_at: null, estimated_minutes: null })), null)
+})
+check('a deleted block still resolves, so its event can be removed', () => {
+  const p = taskAsPushable(sched({ deleted_at: '2026-06-10T14:00:00Z', google_event_id: 'g9' }))
+  assert.equal(pushAction(p).kind, 'delete')
+})
+check('moving a block updates its pushed event', () => {
+  const p = taskAsPushable(sched({
+    google_event_id: 'g1', google_synced_at: '2026-06-10T12:30:00Z',
+    due_at: '2026-06-10T15:00:00Z', updated_at: '2026-06-10T14:00:00Z' }))
+  const a = pushAction(p)
+  assert.equal(a.kind, 'update')
+  assert.equal(a.start, '2026-06-10T15:00:00Z')
 })
 
 console.log(`\n${n} assertions passed\n`)

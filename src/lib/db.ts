@@ -44,6 +44,8 @@ export function draftTask(
     external_id: null,
     external_etag: null,
     external_calendar: null,
+    google_event_id: null,
+    google_synced_at: null,
     created_at: now,
     updated_at: now,
     ...fields,
