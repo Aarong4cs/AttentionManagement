@@ -26,3 +26,6 @@ dist-ssr
 # Local env
 .env.local
 .env*.local
+
+# Vercel CLI link file
+.vercel
