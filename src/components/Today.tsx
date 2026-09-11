@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useNow } from '../hooks/useNow'
 import { useOfflineData } from '../hooks/useOfflineData'
 import { elapsedMs, getProfile, isStale, newId } from '../lib/db'
-import { buildBlocks, clearLocal } from '../lib/offline'
+import { buildBlocks, clearLocal, loadSnapshot } from '../lib/offline'
 import { rankAppend, rankBetween } from '../lib/rank'
 import { materializeAll } from '../lib/recurrence'
 import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
@@ -21,9 +21,22 @@ function hhmmss(ms: number): string {
   return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':')
 }
 
+/**
+ * The timezone decides where every day begins, so the panes cannot render
+ * without it. Reading it from cache is synchronous, which means a cold offline
+ * start renders immediately instead of waiting on a network call that will not
+ * answer. The device zone is the last resort on a first ever run.
+ */
+function cachedZone(): string {
+  return (
+    loadSnapshot().profile?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone
+  )
+}
+
 export default function Today({ email }: { email: string }) {
-  const [tz, setTz] = useState<string | null>(null)
-  const [day, setDay] = useState<string | null>(null)
+  const [tz, setTz] = useState<string>(cachedZone)
+  const [day, setDay] = useState<string>(() => todayIn(cachedZone()))
   const [title, setTitle] = useState('')
   const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
   const [view, setView] = useState<'day' | 'week'>('day')
@@ -31,41 +44,34 @@ export default function Today({ email }: { email: string }) {
   const now = useNow()
 
   useEffect(() => {
+    // correct the cached zone from the server whenever that becomes possible
     getProfile()
       .then((p) => {
-        setTz(p.timezone)
-        setDay(todayIn(p.timezone))
+        if (p.timezone !== cachedZone()) {
+          setTz(p.timezone)
+          setDay(todayIn(p.timezone))
+        }
         // expanding on every open is safe: the unique occurrence index makes
         // materialization idempotent, from either device, concurrently
         return materializeAll()
       })
       .catch(() => {
-        // offline on a cold start: fall back to the cached profile if there is
-        // one, and to the device zone if there is not
-        const cached = JSON.parse(
-          localStorage.getItem('am.snapshot.v1') ?? 'null',
-        ) as { profile?: { timezone?: string } } | null
-        const zone =
-          cached?.profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
-        setTz(zone)
-        setDay(todayIn(zone))
+        // offline: the cached zone stands until the network returns
       })
   }, [])
 
   // One source of truth for what is on screen: the query range and the columns
   // derive from the same list, so they cannot disagree.
   const dayKeys = useMemo(() => {
-    if (!day) return []
     if (view === 'day') return [day]
     const first = startOfWeek(day, WEEK_STARTS_ON)
     return Array.from({ length: 7 }, (_, i) => addDays(first, i))
   }, [day, view])
 
-  const rangeStart = tz && dayKeys.length ? zonedDayStart(dayKeys[0], tz) : null
-  const rangeEnd =
-    tz && dayKeys.length ? zonedDayEnd(dayKeys[dayKeys.length - 1], tz) : null
+  const rangeStart = zonedDayStart(dayKeys[0], tz)
+  const rangeEnd = zonedDayEnd(dayKeys[dayKeys.length - 1], tz)
 
-  const data = useOfflineData(tz ? todayIn(tz) : null, rangeStart, rangeEnd)
+  const data = useOfflineData(todayIn(tz), rangeStart, rangeEnd)
   const { view: snap, enqueue } = data
   const blocks = useMemo(() => buildBlocks(snap), [snap])
 
@@ -119,8 +125,6 @@ export default function Today({ email }: { email: string }) {
         : { op: 'completeTask', at, taskId: task.id, completedAt: at },
     )
   }
-
-  if (!tz || !day) return <p className="muted center">Loading…</p>
 
   const today = todayIn(tz)
   const runningTask = snap.running

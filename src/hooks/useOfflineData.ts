@@ -34,6 +34,13 @@ export interface OfflineData {
  * available, and the snapshot is replaced by whatever the server says
  * afterwards.
  */
+/** A transport failure rather than something the server refused. */
+function isNetworkError(e: unknown): boolean {
+  if (e instanceof TypeError) return true // fetch rejects with TypeError
+  const message = e instanceof Error ? e.message : String(e)
+  return /fetch|network|Failed to fetch|disconnected/i.test(message)
+}
+
 export function useOfflineData(
   today: string | null,
   rangeStart: Date | null,
@@ -67,6 +74,9 @@ export function useOfflineData(
       const result = await flush()
       queueRef.current = loadQueue()
       setQueue(queueRef.current)
+      // a stalled queue means the server could not be reached, whatever
+      // navigator.onLine claims; say "offline" rather than "syncing"
+      if (result.stalled) setOnline(false)
       if (result.rejected.length > 0) {
         setError(
           `${result.rejected.length} change(s) were refused and dropped: ` +
@@ -84,9 +94,12 @@ export function useOfflineData(
       setOnline(true)
       if (result.rejected.length === 0 && !result.stallReason) setError(null)
     } catch (e) {
-      // a failed fetch while offline is expected; keep showing the cache
-      if (typeof navigator !== 'undefined' && !navigator.onLine) setOnline(false)
-      else setError(e instanceof Error ? e.message : String(e))
+      // navigator.onLine only reports whether a network interface is up — it
+      // says true on a wifi network with no internet behind it. Whether the
+      // fetch actually completed is the only reliable signal, so reachability
+      // is derived from that and navigator.onLine is just the initial hint.
+      setOnline(false)
+      if (!isNetworkError(e)) setError(e instanceof Error ? e.message : String(e))
     }
   }, [today, startMs, endMs])
 
