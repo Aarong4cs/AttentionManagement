@@ -15,7 +15,7 @@
     "test:rls": "node tests/rls.test.mjs",
     "test:int": "vitest run",
     "test:all": "npm test && npm run test:rls && npm run test:int",
-    "dev:api": "set -a && . ./.env.local && set +a && vercel dev --listen 5173"
+    "dev:api": "set -a && . ./.env.local && set +a && npx vercel dev --listen 5173"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
