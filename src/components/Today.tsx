@@ -44,7 +44,9 @@ export default function Today({ email }: { email: string }) {
   const [view, setView] = useState<'day' | 'week'>('day')
   const [showRules, setShowRules] = useState(false)
   const [slowSync, setSlowSync] = useState(false)
-  const [menu, setMenu] = useState<MenuTarget | null>(null)
+  const [menu, setMenu] = useState<(MenuTarget & { fromSequence: boolean }) | null>(
+    null,
+  )
   const [repeatFor, setRepeatFor] = useState<Task | null>(null)
   const now = useNow()
 
@@ -219,6 +221,7 @@ export default function Today({ email }: { email: string }) {
       entryId: block.kind === 'trailed' ? block.id : undefined,
       x,
       y,
+      fromSequence: false,
     })
     if (task) setRepeatFor(task)
   }
@@ -231,6 +234,7 @@ export default function Today({ email }: { email: string }) {
       priority: task.priority,
       x,
       y,
+      fromSequence: true,
     })
     setRepeatFor(task)
   }
@@ -388,6 +392,9 @@ export default function Today({ email }: { email: string }) {
             })
           }
           onMenu={openTaskMenu}
+          onRename={(taskId, title) =>
+            enqueue({ op: 'renameTask', at: new Date().toISOString(), taskId, title })
+          }
           onMove={(id, before, after) => {
             const at = new Date().toISOString()
             enqueue({
@@ -432,8 +439,13 @@ export default function Today({ email }: { email: string }) {
             // build a rule; no second implementation of that form
             setShowRules(true)
           }}
-          onDeleteTask={(taskId) =>
-            enqueue({ op: 'deleteTask', at: new Date().toISOString(), taskId })
+          onDeleteTask={
+            // deleting the whole task belongs to the sequence; the timeline
+            // only ever removes a single record of time
+            menu.fromSequence
+              ? (taskId) =>
+                  enqueue({ op: 'deleteTask', at: new Date().toISOString(), taskId })
+              : undefined
           }
           onDeleteEntry={(entryId) =>
             enqueue({ op: 'deleteEntry', at: new Date().toISOString(), entryId })

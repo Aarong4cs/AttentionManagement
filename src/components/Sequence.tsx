@@ -14,6 +14,7 @@ export default function Sequence({
   onClearCompleted,
   onMove,
   onMenu,
+  onRename,
 }: {
   tasks: readonly Task[]
   runningTaskId: Uuid | null
@@ -26,6 +27,7 @@ export default function Sequence({
   /** Neighbours, not just ranks: dropping into a group adopts its priority. */
   onMove: (taskId: Uuid, before: Task | null, after: Task | null) => void
   onMenu: (task: Task, x: number, y: number) => void
+  onRename: (taskId: Uuid, title: string) => void
 }) {
   const rows = useRef(new Map<Uuid, HTMLLIElement>())
   const [dragId, setDragId] = useState<Uuid | null>(null)
@@ -112,6 +114,7 @@ export default function Sequence({
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onMenu={onMenu}
+              onRename={onRename}
             />
           ))}
           {dragId && insertAt === others.length && (
@@ -141,6 +144,7 @@ function RowGroup({
   onPointerMove,
   onPointerUp,
   onMenu,
+  onRename,
 }: {
   task: Task
   showLine: boolean
@@ -153,7 +157,10 @@ function RowGroup({
   onPointerMove: (e: PointerEvent<HTMLButtonElement>) => void
   onPointerUp: (e: PointerEvent<HTMLButtonElement>) => void
   onMenu: (task: Task, x: number, y: number) => void
+  onRename: (taskId: Uuid, title: string) => void
 }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(task.title)
   const isOn = runningTaskId === task.id
   const isDragged = dragId === task.id
   const hold = useLongPress((x, y) => onMenu(task, x, y))
@@ -204,7 +211,45 @@ function RowGroup({
             P{task.priority}
           </span>
         )}
-        <span className="title">{task.title}</span>
+        {editing ? (
+          <form
+            className="title-edit"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const next = draft.trim()
+              if (next && next !== task.title) onRename(task.id, next)
+              setEditing(false)
+            }}
+          >
+            <input
+              autoFocus
+              value={draft}
+              aria-label={`Rename ${task.title}`}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setDraft(task.title)
+                  setEditing(false)
+                }
+              }}
+              onBlur={(e) => {
+                const next = e.target.value.trim()
+                if (next && next !== task.title) onRename(task.id, next)
+                setEditing(false)
+              }}
+            />
+          </form>
+        ) : (
+          <button
+            className="title"
+            onClick={() => {
+              setDraft(task.title)
+              setEditing(true)
+            }}
+          >
+            {task.title}
+          </button>
+        )}
         <button className={isOn ? 'toggle on' : 'toggle'} onClick={() => onToggle(task)}>
           {isOn ? 'Stop' : 'Start'}
         </button>

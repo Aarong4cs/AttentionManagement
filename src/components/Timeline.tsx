@@ -335,7 +335,12 @@ export default function Timeline({
                         </>
                       )}
 
-                      {onDelete && (
+                      {/*
+                        Only a trailed block: the × removes one record of time.
+                        On a scheduled block it would delete the task, which now
+                        belongs to the sequence alone.
+                      */}
+                      {onDelete && block.kind === 'trailed' && (
                         <button
                           className="block-delete"
                           aria-label={`Delete ${block.title}`}

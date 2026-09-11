@@ -28,7 +28,8 @@ export default function TaskMenu({
   onRecolor: (taskId: string, color: string | null) => void
   onPrioritise: (taskId: string, priority: number | null) => void
   onRepeat: (taskId: string) => void
-  onDeleteTask: (taskId: string) => void
+  /** Omitted on the timeline: removing a whole task belongs to the sequence. */
+  onDeleteTask?: (taskId: string) => void
   onDeleteEntry?: (entryId: string) => void
 }) {
   const [renaming, setRenaming] = useState(false)
@@ -161,16 +162,18 @@ export default function TaskMenu({
               </button>
             )}
 
-            <button
-              role="menuitem"
-              className="danger"
-              onClick={() => {
-                onDeleteTask(target.taskId)
-                onClose()
-              }}
-            >
-              Delete task
-            </button>
+            {onDeleteTask && (
+              <button
+                role="menuitem"
+                className="danger"
+                onClick={() => {
+                  onDeleteTask(target.taskId)
+                  onClose()
+                }}
+              >
+                Delete task
+              </button>
+            )}
           </>
         )}
       </div>
