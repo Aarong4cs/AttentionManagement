@@ -33,7 +33,7 @@ interface Joined {
   updated_at: string
   google_event_id: string | null
   google_synced_at: string | null
-  tasks: { title: string; updated_at: string } | null
+  tasks: { title: string; updated_at: string; deleted_at: string | null } | null
 }
 
 export interface PushResult {
@@ -94,7 +94,7 @@ export async function pushEntries(
   const { data, error } = await db
     .from('time_entries')
     .select(
-      'id, started_at, ended_at, deleted_at, updated_at, google_event_id, google_synced_at, tasks(title, updated_at)',
+      'id, started_at, ended_at, deleted_at, updated_at, google_event_id, google_synced_at, tasks(title, updated_at, deleted_at)',
     )
     .eq('user_id', userId)
     .or('google_event_id.not.is.null,deleted_at.is.null')
@@ -122,7 +122,14 @@ export async function pushEntries(
     id: row.id,
     started_at: row.started_at,
     ended_at: row.ended_at,
-    deleted_at: row.deleted_at,
+    /*
+     * A deleted task takes its tracked events out of Google with it. The entry
+     * itself stays in the database — a trailed block is still a permanent
+     * record of what happened — but the calendar is a view we maintain on
+     * request, and leaving it advertising hours against a task that no longer
+     * exists is worse than losing the view.
+     */
+    deleted_at: row.deleted_at ?? row.tasks?.deleted_at ?? null,
     updated_at: row.updated_at,
     google_event_id: row.google_event_id,
     google_synced_at: row.google_synced_at,

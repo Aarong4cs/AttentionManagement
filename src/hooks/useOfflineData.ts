@@ -35,6 +35,9 @@ export interface OfflineData {
  * available, and the snapshot is replaced by whatever the server says
  * afterwards.
  */
+/** How long a Google pull stays fresh enough to skip repeating. */
+const GOOGLE_PULL_MS = 30_000
+
 /** A transport failure rather than something the server refused. */
 function isNetworkError(e: unknown): boolean {
   if (e instanceof TypeError) return true // fetch rejects with TypeError
@@ -59,6 +62,8 @@ export function useOfflineData(
   const [error, setError] = useState<string | null>(null)
   const busy = useRef(false)
   const rerun = useRef(false)
+  /** When Google was last pulled, so a view switch does not trigger one. */
+  const lastPull = useRef(0)
 
   const view = useMemo(() => applyOps(snapshot, queue), [snapshot, queue])
 
@@ -86,18 +91,6 @@ export function useOfflineData(
         setError(`Sync paused — ${result.stallReason}`)
       }
 
-      /*
-       * Pull the calendar before reading, so its events are in the snapshot
-       * rather than appearing a beat later. Failures are swallowed on purpose:
-       * Google being unreachable, or not connected at all, must never stop your
-       * own tasks from loading.
-       */
-      try {
-        await syncNow()
-      } catch {
-        /* not connected, offline, or Google is down */
-      }
-
       const fresh = await fetchSnapshot(today, new Date(startMs), new Date(endMs))
 
       /*
@@ -115,6 +108,36 @@ export function useOfflineData(
       setCold(false)
       setOnline(true)
       if (result.rejected.length === 0 && !result.stallReason) setError(null)
+
+      /*
+       * Google comes AFTER the local read, not before.
+       *
+       * Pulling first meant every change of the visible range — switching to
+       * the week, stepping a day — waited on a round trip to Google before
+       * asking for its own data, so the other days took a couple of seconds to
+       * appear. Nothing on screen depends on that call completing.
+       *
+       * It is also throttled: navigating between days does not need a fresh
+       * pull each time, and the sheet's "Sync now" calls syncNow directly when
+       * an immediate one is wanted.
+       */
+      if (Date.now() - lastPull.current < GOOGLE_PULL_MS) return
+      lastPull.current = Date.now()
+      try {
+        const g = await syncNow()
+        const moved =
+          (g.written ?? 0) + (g.removed ?? 0) +
+          (g.push?.created ?? 0) + (g.push?.updated ?? 0) + (g.push?.deleted ?? 0)
+        // only read again if it actually changed something, which is rare once
+        // the first sync has happened
+        if (moved > 0) {
+          const after = await fetchSnapshot(today, new Date(startMs), new Date(endMs))
+          setSnapshot(after)
+          saveSnapshot(after)
+        }
+      } catch {
+        /* not connected, offline, or Google is down — none of it blocks the app */
+      }
     } catch (e) {
       // the fetch failed, so no fresh snapshot is coming: fall back to whatever
       // the queue actually is now, rather than leaving drained ops applied
