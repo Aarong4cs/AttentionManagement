@@ -690,19 +690,46 @@ input[type='number'] {
 
 /* sync state ----------------------------------------------------------- */
 
+/*
+ * A toast, not a row. As a flex child it pushed the whole app down and back up
+ * on every queued write, which made dragging a block look like the page was
+ * jumping.
+ */
 .syncbar {
+  position: fixed;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 20;
   margin: 0;
-  padding: 0.45rem 0.75rem;
-  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  max-width: calc(100vw - 2rem);
+  border-radius: 999px;
   font-size: 0.8125rem;
   border: 1px solid var(--warn-line);
   background: var(--warn-bg);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.3);
+  pointer-events: none;
+  animation: toast-in 140ms ease-out;
 }
 
 .syncbar.syncing {
   border-color: var(--line);
   background: var(--field);
   color: var(--muted);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0.4rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .syncbar {
+    animation: none;
+  }
 }
 
 /* dragging and deleting blocks ----------------------------------------- */

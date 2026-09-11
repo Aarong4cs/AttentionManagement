@@ -42,6 +42,7 @@ export default function Today({ email }: { email: string }) {
   const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
   const [view, setView] = useState<'day' | 'week'>('day')
   const [showRules, setShowRules] = useState(false)
+  const [slowSync, setSlowSync] = useState(false)
   const now = useNow()
 
   useEffect(() => {
@@ -75,6 +76,22 @@ export default function Today({ email }: { email: string }) {
   const data = useOfflineData(todayIn(tz), rangeStart, rangeEnd)
   const { view: snap, enqueue } = data
   const blocks = useMemo(() => buildBlocks(snap), [snap])
+
+  /**
+   * A sync that finishes in a few hundred milliseconds should not announce
+   * itself. Every drag enqueues an operation, and flashing a banner for each
+   * one is noise. Being offline is different — that state is worth stating
+   * immediately, because it changes what the user should expect.
+   */
+  useEffect(() => {
+    if (!data.online || data.pending === 0) {
+      // oxlint-disable-next-line react/set-state-in-effect
+      setSlowSync(false)
+      return
+    }
+    const timer = setTimeout(() => setSlowSync(true), 700)
+    return () => clearTimeout(timer)
+  }, [data.online, data.pending])
 
   function onAdd(e: FormEvent) {
     e.preventDefault()
@@ -242,8 +259,11 @@ export default function Today({ email }: { email: string }) {
         </div>
       </header>
 
-      {(!data.online || data.pending > 0) && (
-        <p className={data.online ? 'syncbar syncing' : 'syncbar offline'}>
+      {(!data.online || slowSync) && (
+        <p
+          className={data.online ? 'syncbar syncing' : 'syncbar offline'}
+          role="status"
+        >
           {data.online
             ? `Syncing ${data.pending} change${data.pending === 1 ? '' : 's'}…`
             : data.pending > 0
