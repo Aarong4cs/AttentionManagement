@@ -1152,31 +1152,63 @@ button.title:hover {
 }
 
 /*
- * The description of whatever is being tracked, under the list. It is meant to
- * be read while working, so the steps keep their own lines rather than being
+ * The description of whatever is being tracked. This is meant to be read while
+ * working — it is the only thing on screen you are supposed to be looking at
+ * mid-session — so it carries the running colour and sets its own text larger
+ * than the list above it. The steps keep their own lines rather than being
  * reflowed into a paragraph.
  */
 .running-notes {
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--trail);
-  border-left-width: 3px;
-  border-radius: 8px;
-  background: var(--field);
+  padding: 0.85rem 1rem 0.95rem;
+  border: 2px solid var(--trail);
+  border-radius: 10px;
+  background: var(--notes-bg);
+  box-shadow: 0 2px 14px rgb(0 0 0 / 0.25);
+  animation: notes-in 180ms ease-out;
 }
 .running-notes h3 {
-  margin: 0 0 0.3rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--trail);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--trail-strong);
+  letter-spacing: 0.01em;
+}
+.running-notes h3::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--trail-strong);
+  flex: none;
+  animation: pulse 2s ease-in-out infinite;
 }
 .running-notes p {
   margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.45;
+  font-size: 1rem;
+  line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+@keyframes notes-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.3rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .running-notes {
+    animation: none;
+  }
+  .running-notes h3::before {
+    animation: none;
+  }
 }
 
 .menu.is-wide {

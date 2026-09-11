@@ -202,7 +202,16 @@ export default function Today({ email }: { email: string }) {
       readOnly: block.source !== null,
       x,
       y,
-      fromSequence: false,
+      /*
+       * Deleting a task belongs to the sequence — except for a scheduled block,
+       * which is never IN the sequence: getSequence only returns tasks with no
+       * due_at. Withholding it there left blocks created on the timeline with no
+       * way to be deleted at all.
+       *
+       * A trailed block still only offers removing that record of time, because
+       * its task does live in the sequence.
+       */
+      fromSequence: block.kind === 'scheduled' && block.source === null,
     })
     if (task) setRepeatFor(task)
   }
