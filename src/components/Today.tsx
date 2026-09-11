@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNow } from '../hooks/useNow'
 import {
@@ -16,10 +16,10 @@ import {
   stopTrail,
   uncompleteTask,
 } from '../lib/db'
-import { STALE_TIMER_HOURS } from '../lib/constants'
-import { addDays, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
+import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
+import { addDays, startOfWeek, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
 import type { Block, Task, TimeEntry } from '../lib/types'
-import Timeline from './Timeline'
+import Timeline, { type TimelineDay } from './Timeline'
 import Sequence from './Sequence'
 
 function hhmmss(ms: number): string {
@@ -39,6 +39,7 @@ export default function Today({ email }: { email: string }) {
   const [title, setTitle] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
+  const [view, setView] = useState<'day' | 'week'>('day')
   const now = useNow()
 
   useEffect(() => {
@@ -50,13 +51,26 @@ export default function Today({ email }: { email: string }) {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [])
 
+  // One source of truth for which days are on screen: the query range and the
+  // columns are derived from the same list, so they cannot disagree.
+  const dayKeys = useMemo(() => {
+    if (!day) return []
+    if (view === 'day') return [day]
+    const first = startOfWeek(day, WEEK_STARTS_ON)
+    return Array.from({ length: 7 }, (_, i) => addDays(first, i))
+  }, [day, view])
+
   const load = useCallback(async () => {
-    if (!tz || !day) return
+    if (!tz || !day || dayKeys.length === 0) return
     try {
       const [seq, run, bs] = await Promise.all([
         getSequence(),
         getRunningEntry(),
-        blocksInRange(zonedDayStart(day, tz), zonedDayEnd(day, tz)),
+        // the whole week in ONE query, bucketed into columns client-side
+        blocksInRange(
+          zonedDayStart(dayKeys[0], tz),
+          zonedDayEnd(dayKeys[dayKeys.length - 1], tz),
+        ),
       ])
       setTasks(seq)
       setRunning(run)
@@ -65,7 +79,7 @@ export default function Today({ email }: { email: string }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [tz, day])
+  }, [tz, day, dayKeys])
 
   useEffect(() => {
     // This is the external-system synchronisation the rule exists to allow:
@@ -143,33 +157,66 @@ export default function Today({ email }: { email: string }) {
     return <p className="muted center">{error ?? 'Loading…'}</p>
   }
 
-  const isToday = day === todayIn(tz)
+  const today = todayIn(tz)
   const runningTask = running ? tasks.find((t) => t.id === running.task_id) : null
-  // formatted from the day's own noon-UTC instant, which lands on the right
+
+  // formatted from each day's own noon-UTC instant, which lands on the right
   // calendar date in every zone
-  const dayLabel = new Date(`${day}T12:00:00Z`).toLocaleDateString([], {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
+  const fmt = (key: string, opts: Intl.DateTimeFormatOptions) =>
+    new Date(`${key}T12:00:00Z`).toLocaleDateString([], { ...opts, timeZone: 'UTC' })
+
+  const columns: TimelineDay[] = dayKeys.map((key) => ({
+    key,
+    start: zonedDayStart(key, tz),
+    end: zonedDayEnd(key, tz),
+    // composed rather than one format call: some locales render the combined
+    // form as "7 Mon", which reads wrong in a column header
+    label: `${fmt(key, { weekday: 'short' })} ${fmt(key, { day: 'numeric' })}`,
+    isToday: key === today,
+  }))
+
+  const showsToday = dayKeys.includes(today)
+  const rangeLabel =
+    view === 'day'
+      ? day === today
+        ? 'Today'
+        : fmt(day, { weekday: 'short', month: 'short', day: 'numeric' })
+      : `${fmt(dayKeys[0], { month: 'short', day: 'numeric' })} – ${fmt(
+          dayKeys[dayKeys.length - 1],
+          { month: 'short', day: 'numeric' },
+        )}`
 
   return (
     <div className="app">
       <header className="bar">
         <div className="daynav">
-          <button onClick={() => setDay(addDays(day, -1))} aria-label="Previous day">
+          <button
+            onClick={() => setDay(addDays(day, view === 'week' ? -7 : -1))}
+            aria-label={view === 'week' ? 'Previous week' : 'Previous day'}
+          >
             ‹
           </button>
-          <span className="dayname">{isToday ? 'Today' : dayLabel}</span>
-          <button onClick={() => setDay(addDays(day, 1))} aria-label="Next day">
+          <span className="dayname">{rangeLabel}</span>
+          <button
+            onClick={() => setDay(addDays(day, view === 'week' ? 7 : 1))}
+            aria-label={view === 'week' ? 'Next week' : 'Next day'}
+          >
             ›
           </button>
-          {!isToday && (
+          {!showsToday && (
             <button className="link" onClick={() => setDay(todayIn(tz))}>
               today
             </button>
           )}
+        </div>
+
+        <div className="viewswitch">
+          <button className={view === 'day' ? 'on' : ''} onClick={() => setView('day')}>
+            Day
+          </button>
+          <button className={view === 'week' ? 'on' : ''} onClick={() => setView('week')}>
+            Week
+          </button>
         </div>
         <button className="link" onClick={() => supabase.auth.signOut()}>
           {email} · sign out
@@ -213,13 +260,7 @@ export default function Today({ email }: { email: string }) {
 
       <div className={`panes show-${tab}`}>
         <section className="pane timeline-pane">
-          <Timeline
-            blocks={blocks}
-            dayStart={zonedDayStart(day, tz)}
-            dayEnd={zonedDayEnd(day, tz)}
-            now={now}
-            tz={tz}
-          />
+          <Timeline days={columns} blocks={blocks} now={now} tz={tz} />
         </section>
 
         <Sequence

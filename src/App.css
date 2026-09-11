@@ -305,18 +305,64 @@ input[type='checkbox'] {
 .timeline {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
   overscroll-behavior: contain;
 }
 
-.grid {
+.tl {
+  min-width: min-content;
+}
+
+.tl-head,
+.tl-body {
+  display: grid;
+  /* gutter, then one column per day. minmax keeps a week legible on a phone by
+     letting the whole grid scroll sideways rather than crushing the columns. */
+  grid-template-columns: 3.6rem repeat(var(--cols), minmax(4.5rem, 1fr));
+}
+
+.tl-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.tl-day {
+  padding: 0.35rem 0.4rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tl-day.is-today {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.tl-body {
   position: relative;
-  /* 24h at a readable density; the container scrolls */
   height: 96rem;
-  margin-left: 3.6rem;
-  /* room for the topmost hour label, which otherwise clips */
   margin-top: 0.6rem;
   margin-bottom: 0.6rem;
+}
+
+.tl-gutter {
+  position: relative;
+  /* stays put when a week scrolls sideways */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg);
+}
+
+.tl-col {
+  position: relative;
+  border-left: 1px solid var(--line);
+}
+.tl-col.is-today {
+  background: var(--today-tint);
 }
 
 .hour {
@@ -326,15 +372,22 @@ input[type='checkbox'] {
   border-top: 1px solid var(--line);
 }
 
-.hour-label {
+.hour-label,
+.now-time {
   position: absolute;
-  left: -3.6rem;
-  top: -0.55rem;
-  width: 3.2rem;
-  text-align: right;
+  right: 0.4rem;
+  transform: translateY(-50%);
   font-size: 0.6875rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.now-time {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--now);
+  background: var(--bg);
 }
 
 .block {
@@ -344,13 +397,12 @@ input[type='checkbox'] {
   flex-direction: column;
   gap: 0.1rem;
   align-items: flex-start;
-  padding: 0.2rem 0.4rem;
-  min-height: 1.1rem;
+  padding: 0.15rem 0.35rem;
+  min-height: 1rem;
   border-radius: 5px;
   font-size: 0.75rem;
   line-height: 1.2;
   text-align: left;
-  cursor: default;
 }
 
 /* planned: outlined and recessive. observed: filled and solid. */
@@ -395,19 +447,29 @@ input[type='checkbox'] {
   font-variant-numeric: tabular-nums;
 }
 
+/* in a week, a column is ~5rem wide: the title is worth more than the time */
+.dense .block-time {
+  display: none;
+}
+.dense .block {
+  padding: 0.1rem 0.25rem;
+  font-size: 0.6875rem;
+}
+
 .now {
   position: absolute;
-  left: -0.35rem;
+  left: 0;
   right: 0;
   height: 0;
   border-top: 2px solid var(--now);
   pointer-events: none;
+  z-index: 1;
 }
 
 .now::before {
   content: '';
   position: absolute;
-  left: 0;
+  left: -0.2rem;
   top: -0.3rem;
   width: 0.6rem;
   height: 0.6rem;
@@ -415,21 +477,19 @@ input[type='checkbox'] {
   background: var(--now);
 }
 
-.now-time {
-  /* in the hour gutter, where times already live — over the track it collides
-     with whichever block is running right now, which is always */
-  position: absolute;
-  left: -3.6rem;
-  top: -0.55rem;
-  width: 3.2rem;
-  white-space: nowrap;
-  text-align: right;
-  padding-right: 0;
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--now);
-  background: var(--bg);
-  font-variant-numeric: tabular-nums;
+.viewswitch {
+  display: flex;
+  gap: 0.3rem;
+}
+.viewswitch button {
+  min-height: 2rem;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.8125rem;
+}
+.viewswitch button.on {
+  background: var(--trail);
+  color: var(--trail-fg);
+  border-color: transparent;
 }
 
 .running .stop {

@@ -15,6 +15,7 @@
   --sched-line: #b9b3d4;
   --trail-glow: #8fd9c0;
   --now: #c0392b;
+  --today-tint: #f4f2ec;
 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
@@ -37,6 +38,7 @@
     --sched-line: #45456a;
     --trail-glow: #3e9c81;
     --now: #e2705f;
+    --today-tint: #1c1c22;
   }
 }
 
