@@ -12,6 +12,14 @@
     <meta name="apple-mobile-web-app-title" content="Attention" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Attention Management</title>
+    <script>
+      // Applied before first paint: waiting for React means a dark-theme user
+      // gets a white flash on every load.
+      try {
+        var t = localStorage.getItem('am.theme')
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

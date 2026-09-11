@@ -466,7 +466,8 @@ input[type='checkbox'] {
 
 .block-time {
   font-size: 0.6875rem;
-  opacity: 0.75;
+  /* 0.75 was fine on a dark fill and unreadable on a pale one */
+  opacity: 0.85;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -1093,7 +1094,7 @@ button.title:hover {
 .block.is-external {
   background: var(--external-bg);
   border: 1px dashed var(--external-line);
-  color: var(--muted);
+  color: var(--external-fg);
   cursor: default;
 }
 .block.is-external .block-title {
@@ -1278,4 +1279,58 @@ button.chip.danger:hover:not(:disabled) {
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+/* settings -------------------------------------------------------------- */
+
+.setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-start;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+.setting:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.setting h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.setting-value {
+  margin: 0;
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+.setting .hint {
+  font-size: 0.75rem;
+}
+
+/* one control, three states — not three buttons that happen to sit together */
+.segmented {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.segmented button {
+  min-height: 2.1rem;
+  padding: 0.15rem 0.9rem;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font-size: 0.8125rem;
+}
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+.segmented button.on {
+  background: var(--trail);
+  color: var(--trail-fg);
 }

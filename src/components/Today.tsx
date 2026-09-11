@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { supabase } from '../lib/supabase'
 import { useNow } from '../hooks/useNow'
 import { useOfflineData } from '../hooks/useOfflineData'
 import { draftTask, elapsedMs, getProfile, isStale, newId } from '../lib/db'
 import { minutesBetween } from '../lib/layout'
-import { buildBlocks, clearLocal, loadSnapshot } from '../lib/offline'
+import { buildBlocks, loadSnapshot } from '../lib/offline'
 import { rankAppend, rankBetween } from '../lib/rank'
 import { materializeAll } from '../lib/recurrence'
 import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
@@ -15,6 +14,7 @@ import Sequence from './Sequence'
 import Recurrences from './Recurrences'
 import TaskMenu, { type MenuTarget } from './TaskMenu'
 import GoogleCalendar from './GoogleCalendar'
+import Settings from './Settings'
 
 function hhmmss(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -45,6 +45,7 @@ export default function Today({ email }: { email: string }) {
   const [view, setView] = useState<'day' | 'week'>('day')
   const [showRules, setShowRules] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const [slowSync, setSlowSync] = useState(false)
   const [menu, setMenu] = useState<(MenuTarget & { fromSequence: boolean }) | null>(
     null,
@@ -300,18 +301,8 @@ export default function Today({ email }: { email: string }) {
         </div>
 
         <div className="bar-right">
-          <span className="who">{email}</span>
-          <button className="chip" onClick={() => setShowCalendar(true)}>
-            Calendar
-          </button>
-          <button
-            className="chip"
-            onClick={() => {
-              clearLocal()
-              void supabase.auth.signOut()
-            }}
-          >
-            Sign out
+          <button className="chip" onClick={() => setShowSettings(true)}>
+            Settings
           </button>
         </div>
       </header>
@@ -458,6 +449,14 @@ export default function Today({ email }: { email: string }) {
           onDeleteEntry={(entryId) =>
             enqueue({ op: 'deleteEntry', at: new Date().toISOString(), entryId })
           }
+        />
+      )}
+
+      {showSettings && (
+        <Settings
+          email={email}
+          onClose={() => setShowSettings(false)}
+          onOpenCalendar={() => setShowCalendar(true)}
         />
       )}
 
