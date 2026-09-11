@@ -420,4 +420,34 @@ check('a stopped entry from the server is not resurrected as running', () => {
   assert.equal(s.running, null)
 })
 
+
+
+console.log('\ncreating on the timeline')
+check('a scheduled task goes to the timeline, not the sequence', () => {
+  const scheduled = task('s', {
+    due_at: '2026-06-10T16:00:00Z',
+    estimated_minutes: 30,
+    scheduled_end: '2026-06-10T16:30:00Z',
+  })
+  const s = applyOps(snap(), [{ op: 'createTask', at: 'x', task: scheduled }])
+  assert.equal(s.tasks.length, 0, 'must not appear in the sequence pane')
+  assert.equal(s.rangeTasks.length, 1)
+  assert.equal(buildBlocks(s).filter(b => b.kind === 'scheduled').length, 1,
+               'and draws immediately rather than after a round trip')
+})
+check('a task with no due date still goes to the sequence', () => {
+  const s = applyOps(snap(), [{ op: 'createTask', at: 'x', task: task('a') }])
+  assert.equal(s.tasks.length, 1)
+  assert.equal(s.rangeTasks.length, 0)
+})
+check('a scheduled task already returned by the server is not duplicated', () => {
+  const scheduled = task('s', {
+    due_at: '2026-06-10T16:00:00Z', estimated_minutes: 30,
+    scheduled_end: '2026-06-10T16:30:00Z',
+  })
+  const s = applyOps(snap({ rangeTasks: [scheduled] }),
+                     [{ op: 'createTask', at: 'x', task: scheduled }])
+  assert.equal(s.rangeTasks.length, 1)
+})
+
 console.log(`\n${n} assertions passed\n`)

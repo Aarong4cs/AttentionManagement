@@ -992,14 +992,6 @@ input[type='number'] {
 
 /* click empty track to create ------------------------------------------ */
 
-.tl-col {
-  cursor: copy;
-}
-.tl-col .block,
-.tl-col .draft {
-  cursor: default;
-}
-
 .draft {
   position: absolute;
   left: 0;

@@ -107,14 +107,20 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
 
   for (const op of ops) {
     switch (op.op) {
-      case 'createTask':
+      case 'createTask': {
         // Idempotent: the queue is held until the snapshot that already
         // contains these writes arrives, so an op can legitimately be applied
         // on top of its own result. Appending blindly would double the row.
-        if (!s.tasks.some((t) => t.id === op.task.id)) {
-          s.tasks = [...s.tasks, op.task]
-        }
+        const known =
+          s.tasks.some((t) => t.id === op.task.id) ||
+          s.rangeTasks.some((t) => t.id === op.task.id)
+        if (known) break
+        // due_at decides the pane. Adding a scheduled task to the sequence
+        // makes it flash there until the server's snapshot removes it again.
+        if (op.task.due_at === null) s.tasks = [...s.tasks, op.task]
+        else s.rangeTasks = [...s.rangeTasks, op.task]
         break
+      }
 
       case 'moveTask':
         patchTask(op.taskId, { rank: op.rank })
