@@ -674,4 +674,30 @@ check('a scheduled block is never the finisher', () => {
   assert.equal(buildBlocks(s).every(b => !b.completesTask), true)
 })
 
+
+
+console.log('\ntask descriptions')
+check('setNotes shows immediately, before it reaches the server', () => {
+  const s = applyOps(snap({ tasks: [task('a')] }), [
+    { op: 'setNotes', at: 'x', taskId: 'a', notes: 'Step 1\nStep 2' },
+  ])
+  assert.equal(s.tasks[0].notes, 'Step 1\nStep 2')
+})
+check('clearing a description stores nothing rather than an empty string', () => {
+  const s = applyOps(snap({ tasks: [task('a', { notes: 'old' })] }), [
+    { op: 'setNotes', at: 'x', taskId: 'a', notes: null },
+  ])
+  assert.equal(s.tasks[0].notes, null)
+})
+check('a description survives other edits to the same task', () => {
+  const s = applyOps(snap({ tasks: [task('a')] }), [
+    { op: 'setNotes', at: 'x', taskId: 'a', notes: 'Step 1' },
+    { op: 'setPriority', at: 'x', taskId: 'a', priority: 1 },
+    { op: 'renameTask', at: 'x', taskId: 'a', title: 'Renamed' },
+  ])
+  assert.equal(s.tasks[0].notes, 'Step 1')
+  assert.equal(s.tasks[0].priority, 1)
+  assert.equal(s.tasks[0].title, 'Renamed')
+})
+
 console.log(`\n${n} assertions passed\n`)

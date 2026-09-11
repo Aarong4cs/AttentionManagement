@@ -63,6 +63,7 @@ export type PendingOp =
   | { op: 'renameTask'; at: string; taskId: Uuid; title: string }
   | { op: 'recolorTask'; at: string; taskId: Uuid; color: string | null }
   | { op: 'setPriority'; at: string; taskId: Uuid; priority: number | null }
+  | { op: 'setNotes'; at: string; taskId: Uuid; notes: string | null }
 
 // ---------------------------------------------------------------------------
 // the optimistic view
@@ -231,6 +232,10 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
 
       case 'setPriority':
         patchTask(op.taskId, { priority: op.priority })
+        break
+
+      case 'setNotes':
+        patchTask(op.taskId, { notes: op.notes })
         break
 
       case 'deleteEntry':

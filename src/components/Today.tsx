@@ -196,6 +196,7 @@ export default function Today({ email }: { email: string }) {
       title: block.title,
       color: block.color,
       priority: task?.priority ?? null,
+      notes: task?.notes ?? null,
       // only a trailed block has a single record of time to remove
       entryId: block.kind === 'trailed' ? block.id : undefined,
       readOnly: block.source !== null,
@@ -212,6 +213,7 @@ export default function Today({ email }: { email: string }) {
       title: task.title,
       color: task.color,
       priority: task.priority,
+      notes: task.notes,
       x,
       y,
       fromSequence: true,
@@ -421,6 +423,14 @@ export default function Today({ email }: { email: string }) {
           }
           onPrioritise={(taskId, priority) =>
             enqueue({ op: 'setPriority', at: new Date().toISOString(), taskId, priority })
+          }
+          onNotes={(taskId, notes) =>
+            enqueue({
+              op: 'setNotes',
+              at: new Date().toISOString(),
+              taskId,
+              notes: notes.trim() === '' ? null : notes.trim(),
+            })
           }
           onRepeat={() => {
             // hand the task to the recurrence sheet, which already knows how to

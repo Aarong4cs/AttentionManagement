@@ -1141,3 +1141,69 @@ button.title:hover {
 .sequence .running {
   margin: 0;
 }
+
+/* task descriptions ----------------------------------------------------- */
+
+.has-notes {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+/*
+ * The description of whatever is being tracked, under the list. It is meant to
+ * be read while working, so the steps keep their own lines rather than being
+ * reflowed into a paragraph.
+ */
+.running-notes {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--trail);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--field);
+}
+.running-notes h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.running-notes p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.menu.is-wide {
+  min-width: 20rem;
+}
+.menu-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.3rem;
+}
+.menu-notes label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.menu-notes textarea {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: inherit;
+  font: inherit;
+  font-size: max(0.875rem, 16px);
+  line-height: 1.45;
+  resize: vertical;
+}

@@ -564,3 +564,16 @@ export async function setPriority(
   if (error) throw error
   return data
 }
+
+/** Set a task's description. Empty means none, not an empty string. */
+export async function setNotes(taskId: Uuid, notes: string): Promise<Task> {
+  const trimmed = notes.trim()
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ notes: trimmed === '' ? null : trimmed })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}

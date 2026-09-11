@@ -6,6 +6,7 @@ export interface MenuTarget {
   title: string
   color: string | null
   priority: number | null
+  notes: string | null
   /** A mirrored Google event: colour and priority only. */
   readOnly?: boolean
   /** A trailed block also offers removing just that record of time. */
@@ -20,6 +21,7 @@ export default function TaskMenu({
   onRename,
   onRecolor,
   onPrioritise,
+  onNotes,
   onRepeat,
   onDeleteTask,
   onDeleteEntry,
@@ -29,6 +31,7 @@ export default function TaskMenu({
   onRename: (taskId: string, title: string) => void
   onRecolor: (taskId: string, color: string | null) => void
   onPrioritise: (taskId: string, priority: number | null) => void
+  onNotes: (taskId: string, notes: string) => void
   onRepeat: (taskId: string) => void
   /** Omitted on the timeline: removing a whole task belongs to the sequence. */
   onDeleteTask?: (taskId: string) => void
@@ -36,6 +39,8 @@ export default function TaskMenu({
 }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(target.title)
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notes, setNotes] = useState(target.notes ?? '')
   const box = useRef<HTMLDivElement>(null)
 
   // keep the menu on screen when opened near an edge
@@ -60,12 +65,47 @@ export default function TaskMenu({
     <div className="menu-backdrop" onPointerDown={onClose} onContextMenu={(e) => e.preventDefault()}>
       <div
         ref={box}
-        className="menu"
+        className={editingNotes ? 'menu is-wide' : 'menu'}
         role="menu"
         style={{ left: pos.left, top: pos.top }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {renaming ? (
+        {editingNotes ? (
+          <form
+            className="menu-notes"
+            onSubmit={(e) => {
+              e.preventDefault()
+              onNotes(target.taskId, notes)
+              onClose()
+            }}
+          >
+            <label>
+              Description
+              <textarea
+                autoFocus
+                rows={7}
+                value={notes}
+                placeholder={'Step 1 …\nStep 2 …'}
+                onChange={(e) => setNotes(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter makes a new line here; Cmd/Ctrl+Enter saves
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    onNotes(target.taskId, notes)
+                    onClose()
+                  }
+                  if (e.key === 'Escape') onClose()
+                }}
+              />
+            </label>
+            <div className="row">
+              <button type="submit">Save</button>
+              <button type="button" className="link" onClick={onClose}>
+                cancel
+              </button>
+            </div>
+          </form>
+        ) : renaming ? (
           <form
             className="menu-rename"
             onSubmit={(e) => {
@@ -93,6 +133,12 @@ export default function TaskMenu({
             {!target.readOnly && (
               <button role="menuitem" onClick={() => setRenaming(true)}>
                 Rename
+              </button>
+            )}
+
+            {!target.readOnly && (
+              <button role="menuitem" onClick={() => setEditingNotes(true)}>
+                {target.notes ? 'Edit description…' : 'Add description…'}
               </button>
             )}
 

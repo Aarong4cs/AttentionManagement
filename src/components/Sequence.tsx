@@ -37,6 +37,10 @@ export default function Sequence({
   const [insertAt, setInsertAt] = useState<number | null>(null)
 
   const hasCompleted = tasks.some((t) => t.completed_at)
+  // the description of whatever is being tracked right now
+  const runningTask = runningTaskId
+    ? tasks.find((t) => t.id === runningTaskId)
+    : undefined
   const others = tasks.filter((t) => t.id !== dragId)
   // which row the insertion line sits above, in the list's own order
   const dropBeforeId =
@@ -128,6 +132,14 @@ export default function Sequence({
         </ul>
       )}
 
+      {runningTask?.notes && (
+        <section className="running-notes" aria-live="polite">
+          <h3>{runningTask.title}</h3>
+          {/* pre-wrap, so a list of steps stays a list of steps */}
+          <p>{runningTask.notes}</p>
+        </section>
+      )}
+
       {hasCompleted && (
         <button className="link clear" onClick={onClearCompleted}>
           Clear completed
@@ -211,6 +223,11 @@ function RowGroup({
           onChange={() => onComplete(task)}
           aria-label={`Complete ${task.title}`}
         />
+        {task.notes && (
+          <span className="has-notes" aria-label="Has a description">
+            ≡
+          </span>
+        )}
         {task.priority !== null && (
           <span className="prio-tag" data-priority={task.priority}>
             P{task.priority}

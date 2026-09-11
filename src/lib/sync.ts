@@ -21,6 +21,7 @@ import {
   recolorTask,
   renameTask,
   rescheduleTask,
+  setNotes,
   setPriority,
   startTrailAt,
   stopTrail,
@@ -112,6 +113,9 @@ async function run(op: PendingOp): Promise<void> {
       return
     case 'setPriority':
       await setPriority(op.taskId, op.priority)
+      return
+    case 'setNotes':
+      await setNotes(op.taskId, op.notes ?? '')
       return
   }
 }
