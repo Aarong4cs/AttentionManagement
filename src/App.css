@@ -503,10 +503,13 @@ input[type='checkbox'] {
   display: flex;
   gap: 0.3rem;
 }
+
+.chip,
 .viewswitch button {
   min-height: 2rem;
   padding: 0.15rem 0.7rem;
   font-size: 0.8125rem;
+  white-space: nowrap;
 }
 .viewswitch button.on {
   background: var(--trail);
@@ -526,8 +529,25 @@ input[type='checkbox'] {
 
 .bar-right {
   display: flex;
-  gap: 0.75rem;
-  align-items: baseline;
+  gap: 0.4rem;
+  align-items: center;
+  min-width: 0;
+}
+
+/* the signed-in address is information, not an action — it should not look
+   like something to press */
+.who {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+@media (max-width: 47.99rem) {
+  .who {
+    display: none;
+  }
 }
 
 .sheet-backdrop {
@@ -579,12 +599,15 @@ input[type='checkbox'] {
   border-bottom: 1px solid var(--line);
 }
 
-.rule-form .row {
+/* a general utility: it was scoped to .rule-form, so the calendar sheet and the
+   menu got no gap at all and their buttons collided */
+.row {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
 }
-.rule-form .row > select {
+.row > select {
   flex: 1;
 }
 .rule-form input[type='number'] {
@@ -1238,4 +1261,21 @@ button.title:hover {
   font-size: max(0.875rem, 16px);
   line-height: 1.45;
   resize: vertical;
+}
+
+button.chip.danger {
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 45%, transparent);
+}
+button.chip.danger:hover:not(:disabled) {
+  border-color: var(--err);
+}
+
+/* a subscribed calendar can have an absurd name — some are a whole URL */
+.rules .rule-text .title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }

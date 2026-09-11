@@ -300,17 +300,18 @@ export default function Today({ email }: { email: string }) {
         </div>
 
         <div className="bar-right">
-          <button className="link" onClick={() => setShowCalendar(true)}>
-            calendar
+          <span className="who">{email}</span>
+          <button className="chip" onClick={() => setShowCalendar(true)}>
+            Calendar
           </button>
           <button
-            className="link"
+            className="chip"
             onClick={() => {
               clearLocal()
               void supabase.auth.signOut()
             }}
           >
-            {email} · sign out
+            Sign out
           </button>
         </div>
       </header>

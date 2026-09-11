@@ -16,11 +16,26 @@ export async function GET(req: Request): Promise<Response> {
 
   try {
     const token = await accessToken(conn.refresh_token)
-    const calendars = await listCalendars(token)
+    /*
+     * Never offer the calendar this app writes to. Ticking it would pull our
+     * own pushed events straight back in as read-only mirrors, duplicating
+     * every block and then mirroring the mirrors on the next push.
+     */
+    const calendars = (await listCalendars(token)).filter(
+      (c) => c.id !== conn.app_calendar_id,
+    )
     await db.from('google_calendars').upsert(
       calendars.map((c) => ({ user_id: userId, calendar_id: c.id, summary: c.summary })),
       { onConflict: 'user_id,calendar_id', ignoreDuplicates: false },
     )
+    // and drop it if an earlier version already recorded it
+    if (conn.app_calendar_id) {
+      await db
+        .from('google_calendars')
+        .delete()
+        .eq('user_id', userId)
+        .eq('calendar_id', conn.app_calendar_id)
+    }
   } catch (e) {
     // A dead refresh token is the expected failure here — say so plainly rather
     // than returning an empty list that looks like "no calendars".
@@ -30,11 +45,12 @@ export async function GET(req: Request): Promise<Response> {
     )
   }
 
-  const { data } = await db
+  let list = db
     .from('google_calendars')
     .select('calendar_id, summary, enabled, last_synced_at')
     .eq('user_id', userId)
-    .order('summary')
+  if (conn.app_calendar_id) list = list.neq('calendar_id', conn.app_calendar_id)
+  const { data } = await list.order('summary')
   return json({
     connected: true,
     pushEnabled: conn.push_enabled === true,

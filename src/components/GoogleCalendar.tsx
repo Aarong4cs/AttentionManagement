@@ -183,7 +183,7 @@ export default function GoogleCalendar({
                 over an existing link just replaces the refresh token.
               */}
               <button
-                className="link"
+                className="chip"
                 disabled={busy}
                 onClick={async () => {
                   try {
@@ -193,10 +193,10 @@ export default function GoogleCalendar({
                   }
                 }}
               >
-                reconnect
+                Reconnect
               </button>
               <button
-                className="link"
+                className="chip danger"
                 disabled={busy}
                 onClick={async () => {
                   setBusy(true)
@@ -209,7 +209,7 @@ export default function GoogleCalendar({
                   }
                 }}
               >
-                disconnect
+                Disconnect
               </button>
             </div>
           </>
