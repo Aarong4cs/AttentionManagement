@@ -13,6 +13,7 @@ import type { Block, Task } from '../lib/types'
 import Timeline, { type TimelineDay } from './Timeline'
 import Sequence from './Sequence'
 import Recurrences from './Recurrences'
+import TaskMenu, { type MenuTarget } from './TaskMenu'
 
 function hhmmss(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -43,6 +44,8 @@ export default function Today({ email }: { email: string }) {
   const [view, setView] = useState<'day' | 'week'>('day')
   const [showRules, setShowRules] = useState(false)
   const [slowSync, setSlowSync] = useState(false)
+  const [menu, setMenu] = useState<MenuTarget | null>(null)
+  const [repeatFor, setRepeatFor] = useState<Task | null>(null)
   const now = useNow()
 
   useEffect(() => {
@@ -112,6 +115,7 @@ export default function Today({ email }: { email: string }) {
       occurrence_date: null,
       detached: false,
       scheduled_end: null,
+      color: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -172,6 +176,25 @@ export default function Today({ email }: { email: string }) {
         ? { op: 'deleteTask', at, taskId: block.taskId }
         : { op: 'deleteEntry', at, entryId: block.id },
     )
+  }
+
+  function openBlockMenu(block: Block, x: number, y: number) {
+    const task = snap.tasks.find((t) => t.id === block.taskId)
+    setMenu({
+      taskId: block.taskId,
+      title: block.title,
+      color: block.color,
+      // only a trailed block has a single record of time to remove
+      entryId: block.kind === 'trailed' ? block.id : undefined,
+      x,
+      y,
+    })
+    if (task) setRepeatFor(task)
+  }
+
+  function openTaskMenu(task: Task, x: number, y: number) {
+    setMenu({ taskId: task.id, title: task.title, color: task.color, x, y })
+    setRepeatFor(task)
   }
 
   function onComplete(task: Task) {
@@ -309,6 +332,7 @@ export default function Today({ email }: { email: string }) {
             tz={tz}
             onReschedule={onReschedule}
             onDelete={onDeleteBlock}
+            onMenu={openBlockMenu}
           />
         </section>
 
@@ -327,6 +351,7 @@ export default function Today({ email }: { email: string }) {
               taskIds: snap.tasks.filter((t) => t.completed_at).map((t) => t.id),
             })
           }
+          onMenu={openTaskMenu}
           onMove={(id, before, after) =>
             enqueue({
               op: 'moveTask',
@@ -340,8 +365,40 @@ export default function Today({ email }: { email: string }) {
 
       {data.error && <p className="error">{data.error}</p>}
 
+      {menu && (
+        <TaskMenu
+          target={menu}
+          onClose={() => setMenu(null)}
+          onRename={(taskId, title) =>
+            enqueue({ op: 'renameTask', at: new Date().toISOString(), taskId, title })
+          }
+          onRecolor={(taskId, color) =>
+            enqueue({ op: 'recolorTask', at: new Date().toISOString(), taskId, color })
+          }
+          onRepeat={() => {
+            // hand the task to the recurrence sheet, which already knows how to
+            // build a rule; no second implementation of that form
+            setShowRules(true)
+          }}
+          onDeleteTask={(taskId) =>
+            enqueue({ op: 'deleteTask', at: new Date().toISOString(), taskId })
+          }
+          onDeleteEntry={(entryId) =>
+            enqueue({ op: 'deleteEntry', at: new Date().toISOString(), entryId })
+          }
+        />
+      )}
+
       {showRules && (
-        <Recurrences tz={tz} onClose={() => setShowRules(false)} onChanged={data.refresh} />
+        <Recurrences
+          tz={tz}
+          seed={repeatFor}
+          onClose={() => {
+            setShowRules(false)
+            setRepeatFor(null)
+          }}
+          onChanged={data.refresh}
+        />
       )}
     </div>
   )

@@ -18,6 +18,7 @@ export interface EntryRow extends TimeEntry {
   /** Denormalised at fetch time so a trailed block can be drawn from cache. */
   title: string
   taskCompleted: boolean
+  color: string | null
 }
 
 export interface Snapshot {
@@ -59,6 +60,8 @@ export type PendingOp =
     }
   | { op: 'adjustEntry'; at: string; entryId: Uuid; startedAt: string; endedAt: string }
   | { op: 'deleteEntry'; at: string; entryId: Uuid }
+  | { op: 'renameTask'; at: string; taskId: Uuid; title: string }
+  | { op: 'recolorTask'; at: string; taskId: Uuid; color: string | null }
 
 // ---------------------------------------------------------------------------
 // the optimistic view
@@ -153,6 +156,7 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
           duration_seconds: null,
           title: task?.title ?? '',
           taskCompleted: task?.completed_at != null,
+          color: task?.color ?? null,
         }
         s.entries = [...s.entries, entry]
         s.running = entry
@@ -190,6 +194,19 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
         if (s.running?.id === op.entryId) s.running = null
         break
 
+      case 'renameTask':
+        patchTask(op.taskId, { title: op.title })
+        // the entry rows carry a denormalised title so blocks can be drawn from
+        // cache; without this the timeline keeps the old name until a refetch
+        s.entries = s.entries.map((e) =>
+          e.task_id === op.taskId ? { ...e, title: op.title } : e,
+        )
+        break
+
+      case 'recolorTask':
+        patchTask(op.taskId, { color: op.color })
+        break
+
       case 'deleteEntry':
         s.entries = s.entries.map((e) =>
           e.id === op.entryId ? { ...e, deleted_at: op.at } : e,
@@ -219,6 +236,7 @@ export function buildBlocks(snapshot: Snapshot): Block[] {
       running: false,
       completed: t.completed_at !== null,
       edited: false,
+      color: t.color,
     }))
 
   const trailed: Block[] = snapshot.entries.map((e) => ({
@@ -231,6 +249,7 @@ export function buildBlocks(snapshot: Snapshot): Block[] {
     running: e.ended_at === null,
     completed: e.taskCompleted,
     edited: e.edited_at !== null,
+    color: e.color,
   }))
 
   return [...scheduled, ...trailed]

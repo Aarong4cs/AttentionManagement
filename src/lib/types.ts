@@ -54,4 +54,6 @@ export interface Block {
   completed: boolean
   /** Trailed blocks only: the end instant was reconstructed, not observed. */
   edited: boolean
+  /** A palette token, or null for the default. */
+  color: string | null
 }

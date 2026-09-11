@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { dragBlock, layoutDay, nowOffset } from '../lib/layout'
 import { formatRange } from '../lib/time'
+import { useLongPress } from '../hooks/useLongPress'
 import type { Block } from '../lib/types'
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
@@ -55,6 +56,7 @@ export default function Timeline({
   tz,
   onReschedule,
   onDelete,
+  onMenu,
 }: {
   days: readonly TimelineDay[]
   blocks: readonly Block[]
@@ -62,11 +64,19 @@ export default function Timeline({
   tz: string
   onReschedule?: (block: Block, start: Date, end: Date) => void
   onDelete?: (block: Block) => void
+  onMenu?: (block: Block, x: number, y: number) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
   const [grab, setGrab] = useState<Grab | null>(null)
   const [preview, setPreview] = useState<{ start: Date; end: Date } | null>(null)
+  const holdTarget = useRef<Block | null>(null)
+  const hold = useLongPress((x, y) => {
+    // a hold is not a drag: drop whatever the pointer had picked up
+    setGrab(null)
+    setPreview(null)
+    if (holdTarget.current) onMenu?.(holdTarget.current, x, y)
+  })
 
   /**
    * Pointer events, as with the sequence: HTML5 drag-and-drop does not fire on
@@ -210,10 +220,29 @@ export default function Timeline({
                       title={`${block.title} — ${range}${
                         block.edited ? ' (edited)' : ''
                       }`}
-                      onPointerDown={(e) => beginDrag(e, block, 'move', d)}
-                      onPointerMove={moveDrag}
-                      onPointerUp={endDrag}
-                      onPointerCancel={endDrag}
+                      data-color={block.color ?? undefined}
+                      onContextMenu={(e) => {
+                        if (!onMenu) return
+                        e.preventDefault()
+                        onMenu(block, e.clientX, e.clientY)
+                      }}
+                      onPointerDown={(e) => {
+                        hold.onPointerDown(e)
+                        holdTarget.current = block
+                        beginDrag(e, block, 'move', d)
+                      }}
+                      onPointerMove={(e) => {
+                        hold.onPointerMove(e)
+                        moveDrag(e)
+                      }}
+                      onPointerUp={(e) => {
+                        hold.onPointerUp()
+                        endDrag(e)
+                      }}
+                      onPointerCancel={(e) => {
+                        hold.onPointerCancel()
+                        endDrag(e)
+                      }}
                     >
                       <span className="block-title">{block.title}</span>
                       <span className="block-time">

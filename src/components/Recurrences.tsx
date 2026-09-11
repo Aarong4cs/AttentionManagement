@@ -4,7 +4,7 @@ import {
   deleteRecurrence,
   listRecurrences,
 } from '../lib/recurrence'
-import type { Recurrence } from '../lib/types'
+import type { Recurrence, Task } from '../lib/types'
 
 const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const
 
@@ -49,19 +49,22 @@ function describe(rec: Recurrence): string {
 
 export default function Recurrences({
   tz,
+  seed,
   onClose,
   onChanged,
 }: {
   tz: string
+  /** Opened from a task's menu: prefill the form with it. */
+  seed?: Task | null
   onClose: () => void
   onChanged: () => void
 }) {
   const [rules, setRules] = useState<Recurrence[]>([])
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(seed?.title ?? '')
   const [preset, setPreset] = useState('daily')
-  const [scheduled, setScheduled] = useState(true)
+  const [scheduled, setScheduled] = useState(seed?.due_at != null)
   const [time, setTime] = useState('09:00')
-  const [estimate, setEstimate] = useState('30')
+  const [estimate, setEstimate] = useState(String(seed?.estimated_minutes ?? 30))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 

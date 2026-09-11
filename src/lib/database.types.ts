@@ -62,6 +62,7 @@ export type Database = {
       }
       recurrences: {
         Row: {
+          color: string | null
           created_at: string
           deleted_at: string | null
           dtstart: string
@@ -78,6 +79,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          color?: string | null
           created_at?: string
           deleted_at?: string | null
           dtstart: string
@@ -94,6 +96,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          color?: string | null
           created_at?: string
           deleted_at?: string | null
           dtstart?: string
@@ -113,6 +116,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          color: string | null
           completed_at: string | null
           created_at: string
           deleted_at: string | null
@@ -130,6 +134,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          color?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -147,6 +152,7 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          color?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null

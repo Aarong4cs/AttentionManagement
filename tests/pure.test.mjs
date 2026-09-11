@@ -104,7 +104,7 @@ const NOW = D('2026-06-10T12:00:00Z')
 const blk = (id, start, end, kind = 'trailed') => ({
   kind, id, taskId: id, title: id,
   start: D(start), end: end === null ? null : D(end),
-  running: end === null, completed: false, edited: false,
+  running: end === null, completed: false, edited: false, color: null,
 })
 
 console.log('\nday layout')
@@ -200,7 +200,7 @@ import { applyOps, buildBlocks, emptySnapshot } from '../src/lib/offline.ts'
 const task = (id, over = {}) => ({
   id, user_id: 'u', title: id, notes: null, due_at: null, estimated_minutes: null,
   rank: id, completed_at: null, deleted_at: null, recurrence_id: null,
-  occurrence_date: null, detached: false, scheduled_end: null,
+  occurrence_date: null, detached: false, scheduled_end: null, color: null,
   created_at: '2026-06-10T00:00:00Z', updated_at: '2026-06-10T00:00:00Z', ...over,
 })
 const snap = (over = {}) => ({ ...emptySnapshot, ...over })

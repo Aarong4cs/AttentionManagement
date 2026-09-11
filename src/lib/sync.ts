@@ -18,6 +18,8 @@ import {
   deleteEntry,
   deleteTask,
   moveTask,
+  recolorTask,
+  renameTask,
   rescheduleTask,
   startTrailAt,
   stopTrail,
@@ -96,6 +98,12 @@ async function run(op: PendingOp): Promise<void> {
       return
     case 'deleteEntry':
       await deleteEntry(op.entryId)
+      return
+    case 'renameTask':
+      await renameTask(op.taskId, op.title)
+      return
+    case 'recolorTask':
+      await recolorTask(op.taskId, op.color)
       return
   }
 }

@@ -817,3 +817,121 @@ input[type='number'] {
     display: none;
   }
 }
+
+/* task colours --------------------------------------------------------- */
+
+/*
+ * Colour sets the hue; the kind still sets fill versus outline. Flattening
+ * that would cost the one distinction the timeline exists to make — what was
+ * planned against what actually happened.
+ */
+[data-color='slate'] { --task: var(--c-slate); }
+[data-color='blue'] { --task: var(--c-blue); }
+[data-color='violet'] { --task: var(--c-violet); }
+[data-color='teal'] { --task: var(--c-teal); }
+[data-color='amber'] { --task: var(--c-amber); }
+[data-color='rose'] { --task: var(--c-rose); }
+
+.block.trailed[data-color] {
+  background: var(--task);
+  color: #fff;
+}
+.block.scheduled[data-color] {
+  border-color: var(--task);
+  background: color-mix(in srgb, var(--task) 18%, transparent);
+}
+
+/* a coloured sequence row is marked with a spine rather than a wash, so the
+   list stays readable at a glance */
+.seq li[data-color] {
+  box-shadow: inset 0.2rem 0 0 var(--task);
+}
+
+/* context menu --------------------------------------------------------- */
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.menu {
+  position: fixed;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+}
+
+.menu-title {
+  padding: 0.3rem 0.5rem 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 16rem;
+}
+
+.menu button[role='menuitem'] {
+  justify-content: flex-start;
+  text-align: left;
+  min-height: 2.2rem;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+.menu button[role='menuitem']:hover {
+  background: var(--field);
+}
+.menu button.danger {
+  color: var(--err);
+}
+
+.menu-colors {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.swatch {
+  width: 1.3rem;
+  height: 1.3rem;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--task, var(--field));
+}
+.swatch.default {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--field),
+    var(--field) 3px,
+    var(--line) 3px,
+    var(--line) 6px
+  );
+}
+.swatch.on {
+  border-color: var(--fg);
+}
+
+.menu-rename {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.25rem;
+}
+.menu-rename input {
+  flex: 1;
+  min-width: 0;
+  width: 9rem;
+}

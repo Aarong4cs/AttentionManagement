@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent, type PointerEvent } from 'react'
 import { insertionIndex } from '../lib/layout'
+import { useLongPress } from '../hooks/useLongPress'
 import type { Task, Uuid } from '../lib/types'
 
 export default function Sequence({
@@ -12,6 +13,7 @@ export default function Sequence({
   onComplete,
   onClearCompleted,
   onMove,
+  onMenu,
 }: {
   tasks: readonly Task[]
   runningTaskId: Uuid | null
@@ -22,6 +24,7 @@ export default function Sequence({
   onComplete: (task: Task) => void
   onClearCompleted: () => void
   onMove: (taskId: Uuid, before: string | null, after: string | null) => void
+  onMenu: (task: Task, x: number, y: number) => void
 }) {
   const rows = useRef(new Map<Uuid, HTMLLIElement>())
   const [dragId, setDragId] = useState<Uuid | null>(null)
@@ -98,6 +101,7 @@ export default function Sequence({
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onMenu={onMenu}
             />
           ))}
           {insertAt === others.length && <li className="drop-line" aria-hidden="true" />}
@@ -117,6 +121,7 @@ export default function Sequence({
                   onPointerDown={onPointerDown}
                   onPointerMove={onPointerMove}
                   onPointerUp={onPointerUp}
+                  onMenu={onMenu}
                 />
               ))}
         </ul>
@@ -142,6 +147,7 @@ function RowGroup({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onMenu,
 }: {
   task: Task
   showLine: boolean
@@ -153,9 +159,11 @@ function RowGroup({
   onPointerDown: (e: PointerEvent<HTMLButtonElement>, t: Task) => void
   onPointerMove: (e: PointerEvent<HTMLButtonElement>) => void
   onPointerUp: (e: PointerEvent<HTMLButtonElement>) => void
+  onMenu: (task: Task, x: number, y: number) => void
 }) {
   const isOn = runningTaskId === task.id
   const isDragged = dragId === task.id
+  const hold = useLongPress((x, y) => onMenu(task, x, y))
   return (
     <>
       {showLine && <li className="drop-line" aria-hidden="true" />}
@@ -167,6 +175,15 @@ function RowGroup({
         className={[task.completed_at ? 'done' : '', isDragged ? 'is-dragged' : '']
           .filter(Boolean)
           .join(' ')}
+        data-color={task.color ?? undefined}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          onMenu(task, e.clientX, e.clientY)
+        }}
+        onPointerDown={hold.onPointerDown}
+        onPointerMove={hold.onPointerMove}
+        onPointerUp={hold.onPointerUp}
+        onPointerCancel={hold.onPointerCancel}
       >
         <button
           className="grip"

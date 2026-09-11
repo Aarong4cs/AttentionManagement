@@ -186,7 +186,7 @@ export async function fetchRangeRows(
   // running entries (ended_at NULL) are covered by their own partial index.
   const trailed = supabase
     .from('time_entries')
-    .select('*, tasks!inner(title, completed_at)')
+    .select('*, tasks!inner(title, completed_at, color)')
     .is('deleted_at', null)
     .lt('started_at', endIso)
     .or(`ended_at.is.null,ended_at.gt.${startIso}`)
@@ -196,12 +196,19 @@ export async function fetchRangeRows(
   if (s.error) throw s.error
   if (t.error) throw t.error
 
-  type Joined = TimeEntry & { tasks: { title: string; completed_at: string | null } }
+  type Joined = TimeEntry & {
+    tasks: { title: string; completed_at: string | null; color: string | null }
+  }
   const entries: EntryRow[] = (t.data as unknown as Joined[]).map((e) => {
     const { tasks, ...row } = e
     // denormalised here so a trailed block can still be drawn from cache,
     // where there is no join to re-run
-    return { ...row, title: tasks.title, taskCompleted: tasks.completed_at !== null }
+    return {
+      ...row,
+      title: tasks.title,
+      taskCompleted: tasks.completed_at !== null,
+      color: tasks.color,
+    }
   })
 
   return { rangeTasks: s.data as Task[], entries }
@@ -460,4 +467,31 @@ export async function deleteEntry(entryId: Uuid): Promise<void> {
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', entryId)
   if (error) throw error
+}
+
+/** Rename a task. */
+export async function renameTask(taskId: Uuid, title: string): Promise<Task> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ title })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+/** Recolour a task. `null` returns it to the default. */
+export async function recolorTask(
+  taskId: Uuid,
+  color: string | null,
+): Promise<Task> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ color })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
