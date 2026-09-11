@@ -62,6 +62,7 @@ export type PendingOp =
   | { op: 'deleteEntry'; at: string; entryId: Uuid }
   | { op: 'renameTask'; at: string; taskId: Uuid; title: string }
   | { op: 'recolorTask'; at: string; taskId: Uuid; color: string | null }
+  | { op: 'setPriority'; at: string; taskId: Uuid; priority: number | null }
 
 // ---------------------------------------------------------------------------
 // the optimistic view
@@ -219,6 +220,10 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
         patchTask(op.taskId, { color: op.color })
         break
 
+      case 'setPriority':
+        patchTask(op.taskId, { priority: op.priority })
+        break
+
       case 'deleteEntry':
         s.entries = s.entries.map((e) =>
           e.id === op.entryId ? { ...e, deleted_at: op.at } : e,
@@ -228,7 +233,14 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
     }
   }
 
-  s.tasks = alive(s.tasks)
+  // mirror the server's ordering, so a task tagged offline jumps to its group
+  // immediately instead of waiting for the next fetch
+  s.tasks = alive(s.tasks).sort(
+    (a, b) =>
+      (a.priority ?? Infinity) - (b.priority ?? Infinity) ||
+      (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) ||
+      (a.id < b.id ? -1 : 1),
+  )
   s.rangeTasks = alive(s.rangeTasks)
   s.entries = alive(s.entries)
   return s

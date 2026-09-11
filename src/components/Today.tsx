@@ -116,6 +116,7 @@ export default function Today({ email }: { email: string }) {
       detached: false,
       scheduled_end: null,
       color: null,
+      priority: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -184,6 +185,7 @@ export default function Today({ email }: { email: string }) {
       taskId: block.taskId,
       title: block.title,
       color: block.color,
+      priority: task?.priority ?? null,
       // only a trailed block has a single record of time to remove
       entryId: block.kind === 'trailed' ? block.id : undefined,
       x,
@@ -193,7 +195,14 @@ export default function Today({ email }: { email: string }) {
   }
 
   function openTaskMenu(task: Task, x: number, y: number) {
-    setMenu({ taskId: task.id, title: task.title, color: task.color, x, y })
+    setMenu({
+      taskId: task.id,
+      title: task.title,
+      color: task.color,
+      priority: task.priority,
+      x,
+      y,
+    })
     setRepeatFor(task)
   }
 
@@ -352,14 +361,27 @@ export default function Today({ email }: { email: string }) {
             })
           }
           onMenu={openTaskMenu}
-          onMove={(id, before, after) =>
+          onMove={(id, before, after) => {
+            const at = new Date().toISOString()
             enqueue({
               op: 'moveTask',
-              at: new Date().toISOString(),
+              at,
               taskId: id,
-              rank: rankBetween(before, after),
+              rank: rankBetween(before?.rank ?? null, after?.rank ?? null),
             })
-          }
+            /*
+             * The list is grouped by priority, so a drop between two groups has
+             * to mean something. Adopt the row above's tag — or the row below's
+             * when dropped at the very top — otherwise dragging a P3 above a P1
+             * writes a rank that the sort immediately overrides, and the task
+             * springs back as if the drag never happened.
+             */
+            const target = before ? before.priority : after ? after.priority : null
+            const moved = snap.tasks.find((t) => t.id === id)
+            if (moved && moved.priority !== target) {
+              enqueue({ op: 'setPriority', at, taskId: id, priority: target })
+            }
+          }}
         />
       </div>
 
@@ -374,6 +396,9 @@ export default function Today({ email }: { email: string }) {
           }
           onRecolor={(taskId, color) =>
             enqueue({ op: 'recolorTask', at: new Date().toISOString(), taskId, color })
+          }
+          onPrioritise={(taskId, priority) =>
+            enqueue({ op: 'setPriority', at: new Date().toISOString(), taskId, priority })
           }
           onRepeat={() => {
             // hand the task to the recurrence sheet, which already knows how to

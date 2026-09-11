@@ -932,3 +932,58 @@ input[type='number'] {
   min-width: 0;
   width: 9rem;
 }
+
+/* priority ------------------------------------------------------------- */
+
+[data-priority='1'] { --prio: var(--p1); }
+[data-priority='2'] { --prio: var(--p2); }
+[data-priority='3'] { --prio: var(--p3); }
+[data-priority='4'] { --prio: var(--p4); }
+[data-priority='5'] { --prio: var(--p5); }
+
+/* an outline, so it reads as a band across the group without competing with
+   the task colour, which owns the left spine */
+.seq li[data-priority] {
+  border-left: 3px solid var(--prio);
+  border-right: 3px solid var(--prio);
+}
+
+.prio-tag {
+  flex: none;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--prio);
+  border-radius: 4px;
+  color: var(--prio);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.menu-priority {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem 0.4rem;
+}
+
+.prio {
+  flex: 1;
+  min-height: 1.7rem;
+  padding: 0.1rem 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: none;
+  color: var(--prio, var(--muted));
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+.prio[data-priority] {
+  border-color: color-mix(in srgb, var(--prio) 55%, transparent);
+}
+.prio.on {
+  background: var(--prio, var(--field));
+  color: var(--bg);
+  border-color: transparent;
+}
+.prio.none.on {
+  background: var(--muted);
+}

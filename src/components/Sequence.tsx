@@ -23,7 +23,8 @@ export default function Sequence({
   onToggle: (task: Task) => void
   onComplete: (task: Task) => void
   onClearCompleted: () => void
-  onMove: (taskId: Uuid, before: string | null, after: string | null) => void
+  /** Neighbours, not just ranks: dropping into a group adopts its priority. */
+  onMove: (taskId: Uuid, before: Task | null, after: Task | null) => void
   onMenu: (task: Task, x: number, y: number) => void
 }) {
   const rows = useRef(new Map<Uuid, HTMLLIElement>())
@@ -32,6 +33,9 @@ export default function Sequence({
 
   const hasCompleted = tasks.some((t) => t.completed_at)
   const others = tasks.filter((t) => t.id !== dragId)
+  // which row the insertion line sits above, in the list's own order
+  const dropBeforeId =
+    dragId && insertAt !== null ? (others[insertAt]?.id ?? null) : null
 
   /**
    * Pointer events rather than HTML5 drag-and-drop: the latter does not fire on
@@ -60,8 +64,8 @@ export default function Sequence({
 
   function onPointerUp(e: PointerEvent<HTMLButtonElement>) {
     if (dragId && insertAt !== null) {
-      const before = others[insertAt - 1]?.rank ?? null
-      const after = others[insertAt]?.rank ?? null
+      const before = others[insertAt - 1] ?? null
+      const after = others[insertAt] ?? null
       const current = tasks.findIndex((t) => t.id === dragId)
       const unchanged =
         others[insertAt - 1]?.id === tasks[current - 1]?.id &&
@@ -88,10 +92,16 @@ export default function Sequence({
         <p className="muted">Nothing in the sequence.</p>
       ) : (
         <ul className={dragId ? 'seq is-dragging' : 'seq'}>
-          {others.map((task, i) => (
+          {/*
+            The list keeps its own order while dragging, and only an insertion
+            line moves. Pulling the dragged row out and re-rendering it
+            elsewhere reorders the DOM under the pointer mid-gesture, which
+            loses the pointer capture and makes the handle feel dead.
+          */}
+          {tasks.map((task) => (
             <RowGroup
               key={task.id}
-              showLine={insertAt === i}
+              showLine={dropBeforeId === task.id}
               task={task}
               rows={rows}
               dragId={dragId}
@@ -104,26 +114,9 @@ export default function Sequence({
               onMenu={onMenu}
             />
           ))}
-          {insertAt === others.length && <li className="drop-line" aria-hidden="true" />}
-          {dragId &&
-            tasks
-              .filter((t) => t.id === dragId)
-              .map((task) => (
-                <RowGroup
-                  key={task.id}
-                  showLine={false}
-                  task={task}
-                  rows={rows}
-                  dragId={dragId}
-                  runningTaskId={runningTaskId}
-                  onToggle={onToggle}
-                  onComplete={onComplete}
-                  onPointerDown={onPointerDown}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                  onMenu={onMenu}
-                />
-              ))}
+          {dragId && insertAt === others.length && (
+            <li className="drop-line" aria-hidden="true" />
+          )}
         </ul>
       )}
 
@@ -176,6 +169,7 @@ function RowGroup({
           .filter(Boolean)
           .join(' ')}
         data-color={task.color ?? undefined}
+        data-priority={task.priority ?? undefined}
         onContextMenu={(e) => {
           e.preventDefault()
           onMenu(task, e.clientX, e.clientY)
@@ -188,7 +182,11 @@ function RowGroup({
         <button
           className="grip"
           aria-label={`Reorder ${task.title}`}
-          onPointerDown={(e) => onPointerDown(e, task)}
+          onPointerDown={(e) => {
+            // the row listens for a long-press; the grip is unambiguously a drag
+            e.stopPropagation()
+            onPointerDown(e, task)
+          }}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
@@ -201,6 +199,11 @@ function RowGroup({
           onChange={() => onComplete(task)}
           aria-label={`Complete ${task.title}`}
         />
+        {task.priority !== null && (
+          <span className="prio-tag" data-priority={task.priority}>
+            P{task.priority}
+          </span>
+        )}
         <span className="title">{task.title}</span>
         <button className={isOn ? 'toggle on' : 'toggle'} onClick={() => onToggle(task)}>
           {isOn ? 'Stop' : 'Start'}

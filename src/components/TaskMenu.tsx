@@ -5,6 +5,7 @@ export interface MenuTarget {
   taskId: string
   title: string
   color: string | null
+  priority: number | null
   /** A trailed block also offers removing just that record of time. */
   entryId?: string
   x: number
@@ -16,6 +17,7 @@ export default function TaskMenu({
   onClose,
   onRename,
   onRecolor,
+  onPrioritise,
   onRepeat,
   onDeleteTask,
   onDeleteEntry,
@@ -24,6 +26,7 @@ export default function TaskMenu({
   onClose: () => void
   onRename: (taskId: string, title: string) => void
   onRecolor: (taskId: string, color: string | null) => void
+  onPrioritise: (taskId: string, priority: number | null) => void
   onRepeat: (taskId: string) => void
   onDeleteTask: (taskId: string) => void
   onDeleteEntry?: (entryId: string) => void
@@ -105,6 +108,33 @@ export default function TaskMenu({
                     onClose()
                   }}
                 />
+              ))}
+            </div>
+
+            <div className="menu-priority" role="group" aria-label="Priority">
+              <button
+                className={`prio none${target.priority === null ? ' on' : ''}`}
+                aria-label="No priority"
+                onClick={() => {
+                  onPrioritise(target.taskId, null)
+                  onClose()
+                }}
+              >
+                —
+              </button>
+              {[1, 2, 3, 4, 5].map((p) => (
+                <button
+                  key={p}
+                  className={`prio${target.priority === p ? ' on' : ''}`}
+                  data-priority={p}
+                  aria-label={`Priority ${p}`}
+                  onClick={() => {
+                    onPrioritise(target.taskId, p)
+                    onClose()
+                  }}
+                >
+                  P{p}
+                </button>
               ))}
             </div>
 

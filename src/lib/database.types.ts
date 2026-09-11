@@ -126,6 +126,7 @@ export type Database = {
           id: string
           notes: string | null
           occurrence_date: string | null
+          priority: number | null
           rank: string
           recurrence_id: string | null
           scheduled_end: string | null
@@ -144,6 +145,7 @@ export type Database = {
           id?: string
           notes?: string | null
           occurrence_date?: string | null
+          priority?: number | null
           rank: string
           recurrence_id?: string | null
           scheduled_end?: string | null
@@ -162,6 +164,7 @@ export type Database = {
           id?: string
           notes?: string | null
           occurrence_date?: string | null
+          priority?: number | null
           rank?: string
           recurrence_id?: string | null
           scheduled_end?: string | null

@@ -21,6 +21,7 @@ import {
   recolorTask,
   renameTask,
   rescheduleTask,
+  setPriority,
   startTrailAt,
   stopTrail,
   uncompleteTask,
@@ -105,6 +106,9 @@ async function run(op: PendingOp): Promise<void> {
     case 'recolorTask':
       await recolorTask(op.taskId, op.color)
       return
+    case 'setPriority':
+      await setPriority(op.taskId, op.priority)
+      return
   }
 }
 
@@ -124,9 +128,19 @@ export async function flush(): Promise<FlushResult> {
     return result
   }
 
-  let queue = loadQueue()
-  while (queue.length > 0) {
-    const [head, ...rest] = queue
+  /*
+   * Re-read storage on every iteration. An earlier version held the queue in a
+   * local array and wrote the remainder back, which silently DISCARDED anything
+   * enqueue() appended while this was awaiting the network — and a single drag
+   * enqueues two operations in quick succession, so the second was routinely
+   * lost. Operations are only ever appended, so dropping the head from whatever
+   * storage currently holds is always the right edit.
+   */
+  for (;;) {
+    const queue = loadQueue()
+    if (queue.length === 0) return result
+    const head = queue[0]
+
     try {
       await run(head)
       result.applied++
@@ -148,8 +162,7 @@ export async function flush(): Promise<FlushResult> {
         })
       }
     }
-    queue = rest
-    saveQueue(queue)
+
+    saveQueue(loadQueue().slice(1))
   }
-  return result
 }

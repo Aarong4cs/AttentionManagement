@@ -26,6 +26,13 @@
   --c-amber: #8a6212;
   --c-rose: #96374f;
 
+  /* priority: urgent to calm */
+  --p1: #c0392b;
+  --p2: #b5761b;
+  --p3: #2f6191;
+  --p4: #1f7a6d;
+  --p5: #6b7280;
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
 }
@@ -55,6 +62,12 @@
     --c-teal: #2f9285;
     --c-amber: #ac8226;
     --c-rose: #b85172;
+
+    --p1: #e2705f;
+    --p2: #d8a13f;
+    --p3: #5ba0d8;
+    --p4: #3fae9d;
+    --p5: #8b95a3;
   }
 }
 

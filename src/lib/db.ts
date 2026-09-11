@@ -278,7 +278,12 @@ export async function getSequence(today?: DateOnly): Promise<Task[]> {
   if (today) {
     query = query.or(`recurrence_id.is.null,occurrence_date.eq.${today}`)
   }
-  const { data, error } = await query.order('rank').order('id')
+  const { data, error } = await query
+    // tagged tasks first, highest priority at the top; the manual rank still
+    // decides order within a priority, so tagging groups without discarding it
+    .order('priority', { ascending: true, nullsFirst: false })
+    .order('rank')
+    .order('id')
   if (error) throw error
   return data
 }
@@ -489,6 +494,21 @@ export async function recolorTask(
   const { data, error } = await supabase
     .from('tasks')
     .update({ color })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+/** Tag a task P1..P5, or `null` to clear it. */
+export async function setPriority(
+  taskId: Uuid,
+  priority: number | null,
+): Promise<Task> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ priority })
     .eq('id', taskId)
     .select()
     .single()
