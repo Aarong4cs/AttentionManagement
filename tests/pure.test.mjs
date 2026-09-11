@@ -450,4 +450,87 @@ check('a scheduled task already returned by the server is not duplicated', () =>
   assert.equal(s.rangeTasks.length, 1)
 })
 
+
+
+import { mapEvent, syncWindow, windowChanged } from '../src/lib/gcal.ts'
+
+console.log('\ngoogle calendar mapping')
+const ev = (over = {}) => ({
+  id: 'e1', status: 'confirmed', summary: 'Standup', etag: '"abc"',
+  start: { dateTime: '2026-06-10T13:00:00Z' },
+  end: { dateTime: '2026-06-10T13:30:00Z' }, ...over,
+})
+
+check('a timed event becomes a scheduled task', () => {
+  const m = mapEvent(ev())
+  assert.equal(m.kind, 'task')
+  assert.equal(m.task.title, 'Standup')
+  assert.equal(m.task.due_at, '2026-06-10T13:00:00.000Z')
+  assert.equal(m.task.estimated_minutes, 30)
+  assert.equal(m.task.external_etag, '"abc"')
+})
+check('a cancelled event maps to a delete', () => {
+  const m = mapEvent(ev({ status: 'cancelled' }))
+  assert.equal(m.kind, 'delete')
+  assert.equal(m.externalId, 'e1')
+})
+check('an all-day event is skipped, not stretched over a column', () => {
+  const m = mapEvent(ev({ start: { date: '2026-06-10' }, end: { date: '2026-06-11' } }))
+  assert.equal(m.kind, 'skip')
+})
+check('an untitled event still satisfies the title CHECK', () => {
+  const m = mapEvent(ev({ summary: undefined }))
+  assert.equal(m.kind, 'task')
+  assert.ok(m.task.title.length >= 1)
+})
+check('a very long title is truncated below the CHECK limit', () => {
+  const m = mapEvent(ev({ summary: 'x'.repeat(900) }))
+  assert.ok(m.task.title.length <= 500)
+})
+check('a multi-day timed event is clamped to the CHECK ceiling', () => {
+  const m = mapEvent(ev({ end: { dateTime: '2026-06-13T13:00:00Z' } }))
+  assert.equal(m.kind, 'task')
+  assert.equal(m.task.estimated_minutes, 1440, 'would otherwise violate the CHECK')
+})
+check('a zero-length event is skipped', () => {
+  assert.equal(mapEvent(ev({ end: { dateTime: '2026-06-10T13:00:00Z' } })).kind, 'skip')
+})
+check('an event crossing a DST boundary keeps its absolute instants', () => {
+  // 09:00 EST -> 14:00Z; the mapping stores instants, so the timeline's own
+  // zone handling decides where it lands
+  const m = mapEvent(ev({
+    start: { dateTime: '2026-03-07T14:00:00Z' },
+    end: { dateTime: '2026-03-07T14:30:00Z' },
+  }))
+  assert.equal(m.task.due_at, '2026-03-07T14:00:00.000Z')
+  assert.equal(m.task.estimated_minutes, 30)
+})
+
+console.log('\ngoogle sync window')
+check('snaps to month boundaries', () => {
+  const w = syncWindow(D('2026-09-11T12:00:00Z'))
+  assert.equal(w.windowStart, '2026-08-01')
+  assert.equal(w.windowEnd, '2026-12-31')
+})
+check('is stable across a whole month, so the sync token survives', () => {
+  const a = syncWindow(D('2026-09-01T00:00:00Z'))
+  const b = syncWindow(D('2026-09-30T23:00:00Z'))
+  assert.deepEqual([a.windowStart, a.windowEnd], [b.windowStart, b.windowEnd])
+})
+check('moves when the month does', () => {
+  const sep = syncWindow(D('2026-09-15T00:00:00Z'))
+  const oct = syncWindow(D('2026-10-01T00:00:00Z'))
+  assert.notDeepEqual([sep.windowStart, sep.windowEnd], [oct.windowStart, oct.windowEnd])
+  assert.ok(windowChanged({ windowStart: sep.windowStart, windowEnd: sep.windowEnd }, oct))
+})
+check('a never-synced calendar counts as changed', () => {
+  const w = syncWindow(D('2026-09-15T00:00:00Z'))
+  assert.ok(windowChanged({ windowStart: null, windowEnd: null }, w))
+})
+check('handles a December window rolling into next year', () => {
+  const w = syncWindow(D('2026-12-15T00:00:00Z'))
+  assert.equal(w.windowStart, '2026-11-01')
+  assert.equal(w.windowEnd, '2027-03-31')
+})
+
 console.log(`\n${n} assertions passed\n`)

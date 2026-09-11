@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNow } from '../hooks/useNow'
 import { useOfflineData } from '../hooks/useOfflineData'
-import { elapsedMs, getProfile, isStale, newId } from '../lib/db'
+import { draftTask, elapsedMs, getProfile, isStale, newId } from '../lib/db'
 import { minutesBetween } from '../lib/layout'
 import { buildBlocks, clearLocal, loadSnapshot } from '../lib/offline'
 import { rankAppend, rankBetween } from '../lib/rank'
@@ -103,25 +103,12 @@ export default function Today({ email }: { email: string }) {
     const t = title.trim()
     if (!t) return
     setTitle('')
-    const task: Task = {
+    const task = draftTask({
       id: newId(),
       user_id: snap.profile?.id ?? '',
       title: t,
-      notes: null,
-      due_at: null,
-      estimated_minutes: null,
       rank: rankAppend(snap.tasks.map((x) => x.rank)),
-      completed_at: null,
-      deleted_at: null,
-      recurrence_id: null,
-      occurrence_date: null,
-      detached: false,
-      scheduled_end: null,
-      color: null,
-      priority: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
+    })
     enqueue({ op: 'createTask', at: new Date().toISOString(), task })
   }
 
@@ -131,26 +118,16 @@ export default function Today({ email }: { email: string }) {
     enqueue({
       op: 'createTask',
       at,
-      task: {
+      task: draftTask({
         id: newId(),
         user_id: snap.profile?.id ?? '',
         title,
-        notes: null,
+        rank: rankAppend(snap.tasks.map((x) => x.rank)),
         due_at: start.toISOString(),
         estimated_minutes: minutes,
-        rank: rankAppend(snap.tasks.map((x) => x.rank)),
-        completed_at: null,
-        deleted_at: null,
-        recurrence_id: null,
-        occurrence_date: null,
-        detached: false,
         // mirrors the trigger, so the block draws at its full height at once
         scheduled_end: new Date(start.getTime() + minutes * 60_000).toISOString(),
-        color: null,
-        priority: null,
-        created_at: at,
-        updated_at: at,
-      },
+      }),
     })
   }
 

@@ -39,6 +39,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      google_calendars: {
+        Row: {
+          calendar_id: string
+          created_at: string
+          enabled: boolean
+          last_synced_at: string | null
+          summary: string
+          sync_token: string | null
+          updated_at: string
+          user_id: string
+          window_end: string | null
+          window_start: string | null
+        }
+        Insert: {
+          calendar_id: string
+          created_at?: string
+          enabled?: boolean
+          last_synced_at?: string | null
+          summary: string
+          sync_token?: string | null
+          updated_at?: string
+          user_id?: string
+          window_end?: string | null
+          window_start?: string | null
+        }
+        Update: {
+          calendar_id?: string
+          created_at?: string
+          enabled?: boolean
+          last_synced_at?: string | null
+          summary?: string
+          sync_token?: string | null
+          updated_at?: string
+          user_id?: string
+          window_end?: string | null
+          window_start?: string | null
+        }
+        Relationships: []
+      }
+      google_connections: {
+        Row: {
+          connected_at: string
+          google_email: string | null
+          refresh_token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connected_at?: string
+          google_email?: string | null
+          refresh_token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connected_at?: string
+          google_email?: string | null
+          refresh_token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -123,6 +186,9 @@ export type Database = {
           detached: boolean
           due_at: string | null
           estimated_minutes: number | null
+          external_calendar: string | null
+          external_etag: string | null
+          external_id: string | null
           id: string
           notes: string | null
           occurrence_date: string | null
@@ -130,6 +196,7 @@ export type Database = {
           rank: string
           recurrence_id: string | null
           scheduled_end: string | null
+          source: string | null
           title: string
           updated_at: string
           user_id: string
@@ -142,6 +209,9 @@ export type Database = {
           detached?: boolean
           due_at?: string | null
           estimated_minutes?: number | null
+          external_calendar?: string | null
+          external_etag?: string | null
+          external_id?: string | null
           id?: string
           notes?: string | null
           occurrence_date?: string | null
@@ -149,6 +219,7 @@ export type Database = {
           rank: string
           recurrence_id?: string | null
           scheduled_end?: string | null
+          source?: string | null
           title: string
           updated_at?: string
           user_id?: string
@@ -161,6 +232,9 @@ export type Database = {
           detached?: boolean
           due_at?: string | null
           estimated_minutes?: number | null
+          external_calendar?: string | null
+          external_etag?: string | null
+          external_id?: string | null
           id?: string
           notes?: string | null
           occurrence_date?: string | null
@@ -168,6 +242,7 @@ export type Database = {
           rank?: string
           recurrence_id?: string | null
           scheduled_end?: string | null
+          source?: string | null
           title?: string
           updated_at?: string
           user_id?: string

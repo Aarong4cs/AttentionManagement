@@ -17,6 +17,39 @@ import { buildBlocks, emptySnapshot, type EntryRow, type Snapshot } from './offl
 type Rank_ = Rank
 export const newId = (): Uuid => crypto.randomUUID()
 
+/**
+ * A complete task row from the few fields a caller actually cares about.
+ *
+ * Optimistic writes need a whole Task, and spelling out every column at each
+ * call site means every schema addition breaks them all. This has happened
+ * three times.
+ */
+export function draftTask(
+  fields: Pick<Task, 'id' | 'user_id' | 'title' | 'rank'> & Partial<Task>,
+): Task {
+  const now = new Date().toISOString()
+  return {
+    notes: null,
+    due_at: null,
+    estimated_minutes: null,
+    completed_at: null,
+    deleted_at: null,
+    recurrence_id: null,
+    occurrence_date: null,
+    detached: false,
+    scheduled_end: null,
+    color: null,
+    priority: null,
+    source: null,
+    external_id: null,
+    external_etag: null,
+    external_calendar: null,
+    created_at: now,
+    updated_at: now,
+    ...fields,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // running timer
 // ---------------------------------------------------------------------------
