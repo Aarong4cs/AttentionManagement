@@ -33,6 +33,10 @@
   --p4: #1f7a6d;
   --p5: #6b7280;
 
+  /* mirrored google events: recessive, neither planned nor observed */
+  --external-bg: #eeeef1;
+  --external-line: #a6a6b4;
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
 }
@@ -68,6 +72,9 @@
     --p3: #5ba0d8;
     --p4: #3fae9d;
     --p5: #8b95a3;
+
+    --external-bg: #212127;
+    --external-line: #4a4a58;
   }
 }
 

@@ -56,4 +56,6 @@ export interface Block {
   edited: boolean
   /** A palette token, or null for the default. */
   color: string | null
+  /** 'google' for a mirrored event, null for something you own. */
+  source: string | null
 }

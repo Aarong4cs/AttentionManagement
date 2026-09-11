@@ -267,6 +267,7 @@ export function buildBlocks(snapshot: Snapshot): Block[] {
       completed: t.completed_at !== null,
       edited: false,
       color: t.color,
+      source: t.source,
     }))
 
   const trailed: Block[] = snapshot.entries.map((e) => ({
@@ -280,6 +281,8 @@ export function buildBlocks(snapshot: Snapshot): Block[] {
     completed: e.taskCompleted,
     edited: e.edited_at !== null,
     color: e.color,
+    // a trailed block is always something you did, never a mirrored event
+    source: null,
   }))
 
   return [...scheduled, ...trailed]

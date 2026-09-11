@@ -1059,3 +1059,48 @@ button.title:hover {
   color: inherit;
   font: inherit;
 }
+
+/* mirrored calendar events --------------------------------------------- */
+
+/*
+ * A third treatment, distinct from both planned and observed. It has to read as
+ * "not yours": a block that silently refuses to move looks broken, whereas one
+ * that never looked draggable is simply information.
+ */
+.block.is-external {
+  background: var(--external-bg);
+  border: 1px dashed var(--external-line);
+  color: var(--muted);
+  cursor: default;
+}
+.block.is-external .block-title {
+  color: var(--fg);
+  font-weight: 400;
+}
+
+.block-mark {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.25rem;
+  font-size: 0.7rem;
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.menu-note {
+  display: block;
+  font-size: 0.6875rem;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+.check.grow {
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+  white-space: normal;
+  cursor: pointer;
+}
+.check.grow .rule-text {
+  margin-left: 0.1rem;
+}

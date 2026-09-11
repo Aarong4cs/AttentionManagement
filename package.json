@@ -14,7 +14,8 @@
     "db:assert": "psql \"$DB_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/assertions.sql",
     "test:rls": "node tests/rls.test.mjs",
     "test:int": "vitest run",
-    "test:all": "npm test && npm run test:rls && npm run test:int"
+    "test:all": "npm test && npm run test:rls && npm run test:int",
+    "dev:api": "set -a && . ./.env.local && set +a && vercel dev --listen 5173"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchSnapshot } from '../lib/db'
 import { flush } from '../lib/sync'
+import { syncNow } from '../lib/gcalClient'
 import {
   applyOps,
   loadQueue,
@@ -83,6 +84,18 @@ export function useOfflineData(
       } else if (result.stallReason) {
         // a stalled queue looks identical to a working one; say so
         setError(`Sync paused — ${result.stallReason}`)
+      }
+
+      /*
+       * Pull the calendar before reading, so its events are in the snapshot
+       * rather than appearing a beat later. Failures are swallowed on purpose:
+       * Google being unreachable, or not connected at all, must never stop your
+       * own tasks from loading.
+       */
+      try {
+        await syncNow()
+      } catch {
+        /* not connected, offline, or Google is down */
       }
 
       const fresh = await fetchSnapshot(today, new Date(startMs), new Date(endMs))

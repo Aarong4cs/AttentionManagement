@@ -49,5 +49,39 @@ check(insErr !== null, 'anon INSERT on tasks is rejected', insErr?.code ?? 'NO E
 const { data: sess } = await sb.auth.getSession()
 check(sess.session === null, 'no session without signing in')
 
+/*
+ * google_connections holds a Google refresh token. RLS is enabled with NO
+ * policies, so it must be unreadable even by the signed-in owner — scoping to
+ * the user is not enough when the user is a browser. This is the one table
+ * where "your own row" is still the wrong answer.
+ */
+if (env.TEST_USER_EMAIL && env.TEST_USER_PASSWORD) {
+  const { error: signInError } = await sb.auth.signInWithPassword({
+    email: env.TEST_USER_EMAIL,
+    password: env.TEST_USER_PASSWORD,
+  })
+  check(!signInError, 'signed in for the authenticated checks')
+
+  const { data: conns, error: connErr } = await sb.from('google_connections').select('*')
+  check(
+    (conns ?? []).length === 0,
+    'a signed-in client reads NOTHING from google_connections',
+    connErr ? connErr.code : `${(conns ?? []).length} rows`,
+  )
+
+  const { error: writeErr } = await sb
+    .from('google_connections')
+    .insert({ user_id: (await sb.auth.getUser()).data.user.id, refresh_token: 'x' })
+  check(writeErr !== null, 'and cannot write one either', writeErr?.code ?? 'NO ERROR')
+
+  // the picker's table, by contrast, is ordinary user data
+  const { error: calErr } = await sb.from('google_calendars').select('*')
+  check(calErr === null, 'but google_calendars is readable by its owner')
+
+  await sb.auth.signOut()
+} else {
+  check(false, 'TEST_USER_* needed for the authenticated checks')
+}
+
 console.log(fails === 0 ? '\nanon access is correctly locked down\n' : `\n${fails} FAILED\n`)
 process.exit(fails === 0 ? 0 : 1)

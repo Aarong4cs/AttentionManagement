@@ -6,6 +6,8 @@ export interface MenuTarget {
   title: string
   color: string | null
   priority: number | null
+  /** A mirrored Google event: colour and priority only. */
+  readOnly?: boolean
   /** A trailed block also offers removing just that record of time. */
   entryId?: string
   x: number
@@ -83,11 +85,16 @@ export default function TaskMenu({
           </form>
         ) : (
           <>
-            <div className="menu-title">{target.title}</div>
+            <div className="menu-title">
+              {target.title}
+              {target.readOnly && <span className="menu-note">from Google Calendar</span>}
+            </div>
 
-            <button role="menuitem" onClick={() => setRenaming(true)}>
-              Rename
-            </button>
+            {!target.readOnly && (
+              <button role="menuitem" onClick={() => setRenaming(true)}>
+                Rename
+              </button>
+            )}
 
             <div className="menu-colors" role="group" aria-label="Colour">
               <button
@@ -139,17 +146,19 @@ export default function TaskMenu({
               ))}
             </div>
 
-            <button
-              role="menuitem"
-              onClick={() => {
-                onRepeat(target.taskId)
-                onClose()
-              }}
-            >
-              Make repeating…
-            </button>
+            {!target.readOnly && (
+              <button
+                role="menuitem"
+                onClick={() => {
+                  onRepeat(target.taskId)
+                  onClose()
+                }}
+              >
+                Make repeating…
+              </button>
+            )}
 
-            {onDeleteEntry && target.entryId && (
+            {onDeleteEntry && target.entryId && !target.readOnly && (
               <button
                 role="menuitem"
                 className="danger"
@@ -162,7 +171,7 @@ export default function TaskMenu({
               </button>
             )}
 
-            {onDeleteTask && (
+            {onDeleteTask && !target.readOnly && (
               <button
                 role="menuitem"
                 className="danger"

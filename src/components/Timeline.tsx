@@ -280,6 +280,11 @@ export default function Timeline({
                 {positioned.map(({ block, top, height, lane, lanes }) => {
                   const width = 100 / lanes
                   const range = formatRange(block.start, block.end, tz)
+                  // Google owns a mirrored event. Anything that edited it here
+                  // would be undone by the next sync, so none of it is offered
+                  // — and it must not LOOK offered either.
+                  const readOnly = block.source !== null
+                  const canDrag = Boolean(onReschedule) && !block.running && !readOnly
                   return (
                     <div
                       key={`${block.kind}-${block.id}`}
@@ -292,7 +297,8 @@ export default function Timeline({
                         days.length > 1 && lanes > 1 ? 'is-narrow' : '',
                         block.running ? 'is-running' : '',
                         block.completed ? 'is-done' : '',
-                        onReschedule && !block.running ? 'is-draggable' : '',
+                        canDrag ? 'is-draggable' : '',
+                        readOnly ? 'is-external' : '',
                         grab?.block.id === block.id ? 'is-grabbed' : '',
                       ]
                         .filter(Boolean)
@@ -313,16 +319,21 @@ export default function Timeline({
                       onPointerDown={(e) => {
                         hold.onPointerDown(e)
                         holdTarget.current = block
-                        beginDrag(e, block, 'move', d)
+                        if (canDrag) beginDrag(e, block, 'move', d)
                       }}
                       onPointerMove={hold.onPointerMove}
                       onPointerUp={hold.onPointerUp}
                       onPointerCancel={hold.onPointerCancel}
                     >
+                      {readOnly && (
+                        <span className="block-mark" aria-label="From Google Calendar">
+                          ◷
+                        </span>
+                      )}
                       <span className="block-title">{block.title}</span>
                       <span className="block-time">{range}</span>
 
-                      {onReschedule && !block.running && (
+                      {canDrag && (
                         <>
                           <span
                             className="grab-edge top"
@@ -340,7 +351,7 @@ export default function Timeline({
                         On a scheduled block it would delete the task, which now
                         belongs to the sequence alone.
                       */}
-                      {onDelete && block.kind === 'trailed' && (
+                      {onDelete && block.kind === 'trailed' && !readOnly && (
                         <button
                           className="block-delete"
                           aria-label={`Delete ${block.title}`}

@@ -14,6 +14,7 @@ import Timeline, { type TimelineDay } from './Timeline'
 import Sequence from './Sequence'
 import Recurrences from './Recurrences'
 import TaskMenu, { type MenuTarget } from './TaskMenu'
+import GoogleCalendar from './GoogleCalendar'
 
 function hhmmss(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -43,6 +44,7 @@ export default function Today({ email }: { email: string }) {
   const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
   const [view, setView] = useState<'day' | 'week'>('day')
   const [showRules, setShowRules] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(false)
   const [slowSync, setSlowSync] = useState(false)
   const [menu, setMenu] = useState<(MenuTarget & { fromSequence: boolean }) | null>(
     null,
@@ -196,6 +198,7 @@ export default function Today({ email }: { email: string }) {
       priority: task?.priority ?? null,
       // only a trailed block has a single record of time to remove
       entryId: block.kind === 'trailed' ? block.id : undefined,
+      readOnly: block.source !== null,
       x,
       y,
       fromSequence: false,
@@ -286,6 +289,9 @@ export default function Today({ email }: { email: string }) {
         </div>
 
         <div className="bar-right">
+          <button className="link" onClick={() => setShowCalendar(true)}>
+            calendar
+          </button>
           <button
             className="link"
             onClick={() => {
@@ -427,6 +433,13 @@ export default function Today({ email }: { email: string }) {
           onDeleteEntry={(entryId) =>
             enqueue({ op: 'deleteEntry', at: new Date().toISOString(), entryId })
           }
+        />
+      )}
+
+      {showCalendar && (
+        <GoogleCalendar
+          onClose={() => setShowCalendar(false)}
+          onChanged={data.refresh}
         />
       )}
 
