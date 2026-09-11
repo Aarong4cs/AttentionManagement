@@ -1087,6 +1087,20 @@ button.title:hover {
   line-height: 1;
 }
 
+/*
+ * In a week column the mark crowds the title it sits beside, and the dashed
+ * border already says the block is not yours. Real calendars are dense enough
+ * that the characters are worth more than the redundancy.
+ */
+.dense .block-mark,
+.block.is-short .block-mark {
+  display: none;
+}
+.dense .block.is-external .block-title,
+.block.is-external.is-short .block-title {
+  padding-right: 0;
+}
+
 .menu-note {
   display: block;
   font-size: 0.6875rem;
