@@ -20,7 +20,9 @@ import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
 import { addDays, startOfWeek, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
 import type { Block, Task, TimeEntry } from '../lib/types'
 import Timeline, { type TimelineDay } from './Timeline'
+import { materializeAll } from '../lib/recurrence'
 import Sequence from './Sequence'
+import Recurrences from './Recurrences'
 
 function hhmmss(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -40,6 +42,7 @@ export default function Today({ email }: { email: string }) {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
   const [view, setView] = useState<'day' | 'week'>('day')
+  const [showRules, setShowRules] = useState(false)
   const now = useNow()
 
   useEffect(() => {
@@ -47,6 +50,9 @@ export default function Today({ email }: { email: string }) {
       .then((p) => {
         setTz(p.timezone)
         setDay(todayIn(p.timezone))
+        // expanding on every open is safe: the unique occurrence index makes
+        // materialization idempotent, from either device, concurrently
+        return materializeAll()
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }, [])
@@ -64,7 +70,7 @@ export default function Today({ email }: { email: string }) {
     if (!tz || !day || dayKeys.length === 0) return
     try {
       const [seq, run, bs] = await Promise.all([
-        getSequence(),
+        getSequence(todayIn(tz)),
         getRunningEntry(),
         // the whole week in ONE query, bucketed into columns client-side
         blocksInRange(
@@ -218,9 +224,14 @@ export default function Today({ email }: { email: string }) {
             Week
           </button>
         </div>
-        <button className="link" onClick={() => supabase.auth.signOut()}>
-          {email} · sign out
-        </button>
+        <div className="bar-right">
+          <button className="link" onClick={() => setShowRules(true)}>
+            repeating
+          </button>
+          <button className="link" onClick={() => supabase.auth.signOut()}>
+            {email} · sign out
+          </button>
+        </div>
       </header>
 
       {running && (
@@ -278,6 +289,10 @@ export default function Today({ email }: { email: string }) {
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      {showRules && (
+        <Recurrences tz={tz} onClose={() => setShowRules(false)} onChanged={load} />
+      )}
     </div>
   )
 }

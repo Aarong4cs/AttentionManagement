@@ -11,7 +11,7 @@ import { rankAppend, rankBetween } from './rank'
 import { clippedMs } from './time'
 import { MAX_ESTIMATE_MINUTES, STALE_TIMER_HOURS } from './constants'
 import type { Rank } from './rank'
-import type { Block, Profile, Task, TimeEntry, Uuid } from './types'
+import type { Block, DateOnly, Profile, Task, TimeEntry, Uuid } from './types'
 
 type Rank_ = Rank
 export const newId = (): Uuid => crypto.randomUUID()
@@ -235,15 +235,22 @@ export function blocksForDay(
 /**
  * The sequence pane. Completed tasks are NOT filtered out — they keep their
  * rank and position, struck through by the renderer.
+ *
+ * `today` scopes recurring occurrences to their own date. Without it a daily
+ * rule dumps its whole materialized horizon into the pane at once — sixty
+ * copies of "review inbox" ahead of everything real. One-off tasks have no
+ * occurrence_date and are always shown.
  */
-export async function getSequence(): Promise<Task[]> {
-  const { data, error } = await supabase
+export async function getSequence(today?: DateOnly): Promise<Task[]> {
+  let query = supabase
     .from('tasks')
     .select('*')
     .is('due_at', null)
     .is('deleted_at', null)
-    .order('rank')
-    .order('id')
+  if (today) {
+    query = query.or(`recurrence_id.is.null,occurrence_date.eq.${today}`)
+  }
+  const { data, error } = await query.order('rank').order('id')
   if (error) throw error
   return data
 }

@@ -151,11 +151,21 @@ export async function materializeAll(): Promise<number> {
  */
 export async function rewriteFuture(rec: Recurrence): Promise<number> {
   const today = todayIn(rec.timezone)
+  await dropDisposableFuture(rec.id, today)
+  await setMaterializedUntil(rec.id, addDays(today, -1))
+  return materialize({ ...rec, materialized_until: addDays(today, -1) })
+}
 
+/**
+ * Future occurrences that can be regenerated without losing anything: not
+ * edited individually, not completed, and with no logged time. Everything else
+ * is a record of something that happened and is left exactly as it is.
+ */
+async function dropDisposableFuture(recId: string, today: DateOnly): Promise<number> {
   const { data: candidates, error } = await supabase
     .from('tasks')
     .select('id, time_entries(id)')
-    .eq('recurrence_id', rec.id)
+    .eq('recurrence_id', recId)
     .gte('occurrence_date', today)
     .eq('detached', false)
     .is('completed_at', null)
@@ -166,17 +176,65 @@ export async function rewriteFuture(rec: Recurrence): Promise<number> {
   const disposable = (candidates as unknown as WithEntries[])
     .filter((t) => t.time_entries.length === 0)
     .map((t) => t.id)
+  if (disposable.length === 0) return 0
 
-  if (disposable.length > 0) {
-    const { error: delError } = await supabase
-      .from('tasks')
-      .delete()
-      .in('id', disposable)
-    if (delError) throw delError
-  }
+  const { error: delError } = await supabase.from('tasks').delete().in('id', disposable)
+  if (delError) throw delError
+  return disposable.length
+}
 
-  await setMaterializedUntil(rec.id, addDays(today, -1))
-  return materialize({ ...rec, materialized_until: addDays(today, -1) })
+// ---------------------------------------------------------------------------
+// rule management
+// ---------------------------------------------------------------------------
+
+export async function listRecurrences(): Promise<Recurrence[]> {
+  const { data, error } = await supabase
+    .from('recurrences')
+    .select('*')
+    .is('deleted_at', null)
+    .order('created_at')
+  if (error) throw error
+  return data
+}
+
+export async function createRecurrence(input: {
+  title: string
+  rrule: string
+  timeOfDay: string | null
+  estimatedMinutes: number | null
+  timezone: string
+}): Promise<Recurrence> {
+  const { data, error } = await supabase
+    .from('recurrences')
+    .insert({
+      id: crypto.randomUUID(),
+      title: input.title,
+      rrule: input.rrule,
+      dtstart: todayIn(input.timezone),
+      time_of_day: input.timeOfDay,
+      estimated_minutes: input.estimatedMinutes,
+      timezone: input.timezone,
+      until: null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  await materialize(data)
+  return data
+}
+
+/**
+ * Stop a rule. The rule is soft-deleted and its regenerable future occurrences
+ * are removed, but past ones stay: they are what the timeline showed on the day,
+ * and anything completed or trailed is history.
+ */
+export async function deleteRecurrence(rec: Recurrence): Promise<void> {
+  await dropDisposableFuture(rec.id, todayIn(rec.timezone))
+  const { error } = await supabase
+    .from('recurrences')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', rec.id)
+  if (error) throw error
 }
 
 // ---------------------------------------------------------------------------

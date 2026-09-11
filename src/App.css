@@ -499,3 +499,128 @@ input[type='checkbox'] {
   border-color: currentColor;
   color: inherit;
 }
+
+/* repeating sheet ------------------------------------------------------ */
+
+.bar-right {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgb(0 0 0 / 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.sheet {
+  width: min(28rem, 100%);
+  max-height: 85dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+@media (min-width: 40rem) {
+  .sheet-backdrop {
+    align-items: center;
+  }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.sheet-head h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.rule-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.rule-form .row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.rule-form .row > select {
+  flex: 1;
+}
+.rule-form input[type='number'] {
+  width: 5rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.hint {
+  font-size: 0.8125rem;
+}
+
+select,
+input[type='time'],
+input[type='number'] {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--field);
+  color: inherit;
+  font: inherit;
+  font-size: max(0.9375rem, 16px);
+}
+
+.rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rules li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.rule-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rule-text .title {
+  font-weight: 500;
+}
+.rule-text .muted {
+  font-size: 0.75rem;
+}
