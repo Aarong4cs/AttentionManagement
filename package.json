@@ -11,7 +11,10 @@
     "test": "node tests/pure.test.mjs",
     "db:push": "supabase db push",
     "db:types": "supabase gen types typescript --linked > src/lib/database.types.ts",
-    "db:assert": "psql \"$DB_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/assertions.sql"
+    "db:assert": "psql \"$DB_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/assertions.sql",
+    "test:rls": "node tests/rls.test.mjs",
+    "test:int": "vitest run",
+    "test:all": "npm test && npm run test:rls && npm run test:int"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
@@ -28,6 +31,7 @@
     "oxlint": "^1.79.0",
     "supabase": "^2.117.0",
     "typescript": "~6.0.2",
-    "vite": "^8.2.2"
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   }
 }
