@@ -3,10 +3,12 @@ import { supabase } from '../lib/supabase'
 import { useNow } from '../hooks/useNow'
 import {
   UNIQUE_VIOLATION,
+  blocksInRange,
   clearCompleted,
   completeTask,
   createTask,
   elapsedMs,
+  getProfile,
   getRunningEntry,
   getSequence,
   isStale,
@@ -15,7 +17,10 @@ import {
   uncompleteTask,
 } from '../lib/db'
 import { STALE_TIMER_HOURS } from '../lib/constants'
-import type { Task, TimeEntry } from '../lib/types'
+import { addDays, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
+import type { Block, Task, TimeEntry } from '../lib/types'
+import Timeline from './Timeline'
+import Sequence from './Sequence'
 
 function hhmmss(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -26,31 +31,47 @@ function hhmmss(ms: number): string {
 }
 
 export default function Today({ email }: { email: string }) {
+  const [tz, setTz] = useState<string | null>(null)
+  const [day, setDay] = useState<string | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
+  const [blocks, setBlocks] = useState<Block[]>([])
   const [running, setRunning] = useState<TimeEntry | null>(null)
   const [title, setTitle] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
   const now = useNow()
 
+  useEffect(() => {
+    getProfile()
+      .then((p) => {
+        setTz(p.timezone)
+        setDay(todayIn(p.timezone))
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+  }, [])
+
   const load = useCallback(async () => {
+    if (!tz || !day) return
     try {
-      const [seq, run] = await Promise.all([getSequence(), getRunningEntry()])
+      const [seq, run, bs] = await Promise.all([
+        getSequence(),
+        getRunningEntry(),
+        blocksInRange(zonedDayStart(day, tz), zonedDayEnd(day, tz)),
+      ])
       setTasks(seq)
       setRunning(run)
+      setBlocks(bs)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setLoading(false)
     }
-  }, [])
+  }, [tz, day])
 
   useEffect(() => {
+    // This is the external-system synchronisation the rule exists to allow:
+    // an initial fetch plus a realtime subscription to the same source.
+    // oxlint-disable-next-line react/set-state-in-effect
     load()
-
-    // Realtime is the fast path; the refetch below is the correctness path.
-    // iOS drops this socket constantly, so never rely on it alone.
     const channel = supabase
       .channel('attention-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, load)
@@ -62,7 +83,6 @@ export default function Today({ email }: { email: string }) {
     }
     document.addEventListener('visibilitychange', onWake)
     window.addEventListener('focus', onWake)
-
     return () => {
       supabase.removeChannel(channel)
       document.removeEventListener('visibilitychange', onWake)
@@ -72,7 +92,6 @@ export default function Today({ email }: { email: string }) {
 
   async function toggle(task: Task) {
     const wasRunning = running
-    // optimistic: the block should appear to start the instant it is tapped
     setRunning(
       wasRunning?.task_id === task.id
         ? null
@@ -90,48 +109,68 @@ export default function Today({ email }: { email: string }) {
         if (wasRunning) await stopTrail(wasRunning.id)
         await startTrail(task.id)
       }
-      await load()
     } catch (e) {
       const code = (e as { code?: string })?.code
-      if (code === UNIQUE_VIOLATION) {
-        setError('Another device already has a timer running. Reloaded.')
-      } else {
-        setError(e instanceof Error ? e.message : String(e))
-      }
+      setError(
+        code === UNIQUE_VIOLATION
+          ? 'Another device already has a timer running. Reloaded.'
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      )
+    }
+    await load()
+  }
+
+  async function guard(fn: () => Promise<unknown>) {
+    try {
+      await fn()
       await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
     }
   }
 
-  async function onAdd(e: FormEvent) {
+  function onAdd(e: FormEvent) {
     e.preventDefault()
     const t = title.trim()
     if (!t) return
     setTitle('')
-    try {
-      await createTask(t)
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
+    guard(() => createTask(t))
   }
 
-  async function onComplete(task: Task) {
-    try {
-      if (task.completed_at) await uncompleteTask(task.id)
-      else await completeTask(task.id)
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
+  if (!tz || !day) {
+    return <p className="muted center">{error ?? 'Loading…'}</p>
   }
 
+  const isToday = day === todayIn(tz)
   const runningTask = running ? tasks.find((t) => t.id === running.task_id) : null
-  const hasCompleted = tasks.some((t) => t.completed_at)
+  // formatted from the day's own noon-UTC instant, which lands on the right
+  // calendar date in every zone
+  const dayLabel = new Date(`${day}T12:00:00Z`).toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
 
   return (
-    <main className="app">
+    <div className="app">
       <header className="bar">
-        <h1>Attention Management</h1>
+        <div className="daynav">
+          <button onClick={() => setDay(addDays(day, -1))} aria-label="Previous day">
+            ‹
+          </button>
+          <span className="dayname">{isToday ? 'Today' : dayLabel}</span>
+          <button onClick={() => setDay(addDays(day, 1))} aria-label="Next day">
+            ›
+          </button>
+          {!isToday && (
+            <button className="link" onClick={() => setDay(todayIn(tz))}>
+              today
+            </button>
+          )}
+        </div>
         <button className="link" onClick={() => supabase.auth.signOut()}>
           {email} · sign out
         </button>
@@ -142,67 +181,62 @@ export default function Today({ email }: { email: string }) {
           <span className="dot" aria-hidden="true" />
           <span className="what">{runningTask?.title ?? 'Running'}</span>
           <span className="clock">{hhmmss(elapsedMs(running, now))}</span>
+          <button
+            className="stop"
+            onClick={() => runningTask && toggle(runningTask)}
+          >
+            Stop
+          </button>
         </section>
       )}
 
       {running && isStale(running, now) && (
         <p className="warn">
-          This timer has been running over {STALE_TIMER_HOURS} hours — did you
-          forget to stop it?
+          Running over {STALE_TIMER_HOURS} hours — did you forget to stop it?
         </p>
       )}
 
-      <form className="add" onSubmit={onAdd}>
-        <input
-          value={title}
-          placeholder="Add a task to the sequence"
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button type="submit">Add</button>
-      </form>
-
-      {loading ? (
-        <p className="muted">Loading…</p>
-      ) : tasks.length === 0 ? (
-        <p className="muted">No sequence tasks yet.</p>
-      ) : (
-        <ul className="seq">
-          {tasks.map((task) => {
-            const isOn = running?.task_id === task.id
-            return (
-              <li key={task.id} className={task.completed_at ? 'done' : undefined}>
-                <input
-                  type="checkbox"
-                  checked={task.completed_at !== null}
-                  onChange={() => onComplete(task)}
-                  aria-label={`Complete ${task.title}`}
-                />
-                <span className="title">{task.title}</span>
-                <button
-                  className={isOn ? 'toggle on' : 'toggle'}
-                  onClick={() => toggle(task)}
-                >
-                  {isOn ? 'Stop' : 'Start'}
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      {hasCompleted && (
+      <nav className="tabs">
         <button
-          className="link clear"
-          onClick={async () => {
-            await clearCompleted()
-            await load()
-          }}
+          className={tab === 'timeline' ? 'on' : ''}
+          onClick={() => setTab('timeline')}
         >
-          Clear completed
+          Timeline
         </button>
-      )}
+        <button
+          className={tab === 'sequence' ? 'on' : ''}
+          onClick={() => setTab('sequence')}
+        >
+          Sequence
+        </button>
+      </nav>
+
+      <div className={`panes show-${tab}`}>
+        <section className="pane timeline-pane">
+          <Timeline
+            blocks={blocks}
+            dayStart={zonedDayStart(day, tz)}
+            dayEnd={zonedDayEnd(day, tz)}
+            now={now}
+            tz={tz}
+          />
+        </section>
+
+        <Sequence
+          tasks={tasks}
+          runningTaskId={running?.task_id ?? null}
+          title={title}
+          onTitleChange={setTitle}
+          onAdd={onAdd}
+          onToggle={toggle}
+          onComplete={(t) =>
+            guard(() => (t.completed_at ? uncompleteTask(t.id) : completeTask(t.id)))
+          }
+          onClearCompleted={() => guard(() => clearCompleted())}
+        />
+      </div>
 
       {error && <p className="error">{error}</p>}
-    </main>
+    </div>
   )
 }

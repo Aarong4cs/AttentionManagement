@@ -11,7 +11,7 @@ import { rankAppend, rankBetween } from './rank'
 import { clippedMs } from './time'
 import { MAX_ESTIMATE_MINUTES, STALE_TIMER_HOURS } from './constants'
 import type { Rank } from './rank'
-import type { Block, Task, TimeEntry, Uuid } from './types'
+import type { Block, Profile, Task, TimeEntry, Uuid } from './types'
 
 type Rank_ = Rank
 export const newId = (): Uuid => crypto.randomUUID()
@@ -167,14 +167,17 @@ export async function blocksInRange(start: Date, end: Date): Promise<Block[]> {
     .order('rank')
     .order('id')
 
+  // Overlap, with no lookback window on started_at. An earlier version bounded
+  // started_at for index selectivity, which silently dropped any entry longer
+  // than the window — including a timer left running for days. The
+  // (user_id, ended_at) index makes `ended_at > start` selective instead, and
+  // running entries (ended_at NULL) are covered by their own partial index.
   const trailed = supabase
     .from('time_entries')
     .select('*, tasks!inner(title, completed_at)')
     .is('deleted_at', null)
     .lt('started_at', endIso)
-    // running entries (ended_at NULL) must survive this filter
     .or(`ended_at.is.null,ended_at.gt.${startIso}`)
-    .gte('started_at', new Date(start.getTime() - 2 * 86_400_000).toISOString())
     .order('started_at')
 
   const [s, t] = await Promise.all([scheduled, trailed])
@@ -347,6 +350,13 @@ export async function uncompleteTask(taskId: Uuid): Promise<Task> {
     .eq('id', taskId)
     .select()
     .single()
+  if (error) throw error
+  return data
+}
+
+/** The signed-in user's profile. Its timezone defines where every day begins. */
+export async function getProfile(): Promise<Profile> {
+  const { data, error } = await supabase.from('profiles').select('*').single()
   if (error) throw error
   return data
 }

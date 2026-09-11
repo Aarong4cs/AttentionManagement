@@ -218,3 +218,224 @@ input[type='checkbox'] {
   flex: none;
   accent-color: var(--trail);
 }
+
+/* layout --------------------------------------------------------------- */
+
+.app {
+  max-width: 64rem;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem 0.75rem;
+}
+
+.daynav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.daynav button {
+  min-height: 2rem;
+  padding: 0.15rem 0.6rem;
+}
+.daynav .dayname {
+  min-width: 7rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.panes {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.timeline-pane {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sequence {
+  overflow-y: auto;
+}
+
+/* two panes side by side once there is room; tabs below that */
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+}
+.tabs button {
+  flex: 1;
+  min-height: 2.4rem;
+}
+.tabs button.on {
+  background: var(--trail);
+  color: var(--trail-fg);
+  border-color: transparent;
+}
+
+@media (max-width: 47.99rem) {
+  .panes.show-timeline .sequence,
+  .panes.show-sequence .timeline-pane {
+    display: none;
+  }
+}
+
+@media (min-width: 48rem) {
+  .tabs {
+    display: none;
+  }
+  .panes {
+    grid-template-columns: 1fr 20rem;
+  }
+}
+
+/* timeline ------------------------------------------------------------- */
+
+.timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.grid {
+  position: relative;
+  /* 24h at a readable density; the container scrolls */
+  height: 96rem;
+  margin-left: 3.6rem;
+  /* room for the topmost hour label, which otherwise clips */
+  margin-top: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.hour {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--line);
+}
+
+.hour-label {
+  position: absolute;
+  left: -3.6rem;
+  top: -0.55rem;
+  width: 3.2rem;
+  text-align: right;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.block {
+  position: absolute;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  align-items: flex-start;
+  padding: 0.2rem 0.4rem;
+  min-height: 1.1rem;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-align: left;
+  cursor: default;
+}
+
+/* planned: outlined and recessive. observed: filled and solid. */
+.block.scheduled {
+  background: var(--sched-bg);
+  border: 1px solid var(--sched-line);
+  color: var(--fg);
+}
+
+.block.trailed {
+  background: var(--trail);
+  border: 1px solid transparent;
+  color: var(--trail-fg);
+}
+
+.block.is-running {
+  box-shadow: 0 0 0 2px var(--trail-glow);
+}
+
+.block.is-done .block-title {
+  text-decoration: line-through;
+  opacity: 0.75;
+}
+
+/* a reconstructed end time, not an observed one */
+.block.is-edited {
+  border-style: dashed;
+  border-color: var(--trail-fg);
+}
+
+.block-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.block-time {
+  font-size: 0.6875rem;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.now {
+  position: absolute;
+  left: -0.35rem;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--now);
+  pointer-events: none;
+}
+
+.now::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -0.3rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--now);
+}
+
+.now-time {
+  /* in the hour gutter, where times already live — over the track it collides
+     with whichever block is running right now, which is always */
+  position: absolute;
+  left: -3.6rem;
+  top: -0.55rem;
+  width: 3.2rem;
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 0;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--now);
+  background: var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+
+.running .stop {
+  min-height: 2rem;
+  padding: 0.2rem 0.7rem;
+  background: transparent;
+  border-color: currentColor;
+  color: inherit;
+}

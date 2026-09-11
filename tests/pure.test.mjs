@@ -93,4 +93,80 @@ check('byRank breaks ties on id, matching ORDER BY rank, id', () => {
   assert.deepEqual(rows.sort(byRank).map(r => r.id), ['a', 'b', 'c'])
 })
 
+
+import { layoutDay, nowOffset } from '../src/lib/layout.ts'
+
+const D = (s) => new Date(s)
+const DAY_S = D('2026-06-10T00:00:00Z')
+const DAY_E = D('2026-06-11T00:00:00Z')
+const NOW = D('2026-06-10T12:00:00Z')
+
+const blk = (id, start, end, kind = 'trailed') => ({
+  kind, id, taskId: id, title: id,
+  start: D(start), end: end === null ? null : D(end),
+  running: end === null, completed: false, edited: false,
+})
+
+console.log('\nday layout')
+check('positions a block as a fraction of the column', () => {
+  const [p] = layoutDay([blk('a', '2026-06-10T06:00:00Z', '2026-06-10T12:00:00Z')],
+                        DAY_S, DAY_E, NOW)
+  assert.equal(p.top, 0.25)
+  assert.equal(p.height, 0.25)
+  assert.equal(p.lanes, 1)
+})
+check('clips a block that starts before the column', () => {
+  const [p] = layoutDay([blk('a', '2026-06-09T22:00:00Z', '2026-06-10T06:00:00Z')],
+                        DAY_S, DAY_E, NOW)
+  assert.equal(p.top, 0)
+  assert.equal(p.height, 0.25)
+})
+check('a running block grows to now, not past it', () => {
+  const [p] = layoutDay([blk('a', '2026-06-10T06:00:00Z', null)], DAY_S, DAY_E, NOW)
+  assert.equal(p.top, 0.25)
+  assert.equal(p.height, 0.25, 'ends at NOW = 12:00')
+})
+check('drops a block that misses the column entirely', () => {
+  assert.equal(layoutDay([blk('a', '2026-06-12T06:00:00Z', '2026-06-12T07:00:00Z')],
+                         DAY_S, DAY_E, NOW).length, 0)
+})
+check('overlapping blocks get side-by-side lanes', () => {
+  const ps = layoutDay([
+    blk('a', '2026-06-10T06:00:00Z', '2026-06-10T08:00:00Z'),
+    blk('b', '2026-06-10T07:00:00Z', '2026-06-10T09:00:00Z'),
+  ], DAY_S, DAY_E, NOW)
+  assert.equal(ps.length, 2)
+  assert.deepEqual(ps.map(p => p.lane), [0, 1])
+  assert.ok(ps.every(p => p.lanes === 2))
+})
+check('non-overlapping blocks share one lane', () => {
+  const ps = layoutDay([
+    blk('a', '2026-06-10T06:00:00Z', '2026-06-10T07:00:00Z'),
+    blk('b', '2026-06-10T08:00:00Z', '2026-06-10T09:00:00Z'),
+  ], DAY_S, DAY_E, NOW)
+  assert.ok(ps.every(p => p.lanes === 1 && p.lane === 0))
+})
+check('a separate collision does not widen an earlier cluster', () => {
+  const ps = layoutDay([
+    blk('a', '2026-06-10T01:00:00Z', '2026-06-10T02:00:00Z'),
+    blk('b', '2026-06-10T01:30:00Z', '2026-06-10T02:30:00Z'),
+    blk('c', '2026-06-10T10:00:00Z', '2026-06-10T11:00:00Z'),
+  ], DAY_S, DAY_E, NOW)
+  const byId = Object.fromEntries(ps.map(p => [p.block.id, p]))
+  assert.equal(byId.a.lanes, 2)
+  assert.equal(byId.b.lanes, 2)
+  assert.equal(byId.c.lanes, 1, 'the lone afternoon block keeps full width')
+})
+check('a scheduled block sorts behind a trailed one starting at the same time', () => {
+  const ps = layoutDay([
+    blk('t', '2026-06-10T06:00:00Z', '2026-06-10T07:00:00Z', 'trailed'),
+    blk('s', '2026-06-10T06:00:00Z', '2026-06-10T07:00:00Z', 'scheduled'),
+  ], DAY_S, DAY_E, NOW)
+  assert.equal(ps[0].block.kind, 'scheduled')
+})
+check('nowOffset locates the marker, and is null off-day', () => {
+  assert.equal(nowOffset(DAY_S, DAY_E, NOW), 0.5)
+  assert.equal(nowOffset(DAY_S, DAY_E, D('2026-06-12T00:00:00Z')), null)
+})
+
 console.log(`\n${n} assertions passed\n`)
