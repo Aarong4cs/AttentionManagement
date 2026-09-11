@@ -90,6 +90,14 @@ export default function Sequence({
     <section className="pane sequence">
       {running}
 
+      {runningTask?.notes && (
+        <section className="running-notes" aria-live="polite">
+          <h3>{runningTask.title}</h3>
+          {/* pre-wrap, so a list of steps stays a list of steps */}
+          <p>{runningTask.notes}</p>
+        </section>
+      )}
+
       <form className="add" onSubmit={onAdd}>
         <input
           value={title}
@@ -130,14 +138,6 @@ export default function Sequence({
             <li className="drop-line" aria-hidden="true" />
           )}
         </ul>
-      )}
-
-      {runningTask?.notes && (
-        <section className="running-notes" aria-live="polite">
-          <h3>{runningTask.title}</h3>
-          {/* pre-wrap, so a list of steps stays a list of steps */}
-          <p>{runningTask.notes}</p>
-        </section>
       )}
 
       {hasCompleted && (
