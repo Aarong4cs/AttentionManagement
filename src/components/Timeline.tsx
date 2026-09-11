@@ -205,7 +205,6 @@ export default function Timeline({
                         days.length > 1 && lanes > 1 ? 'is-narrow' : '',
                         block.running ? 'is-running' : '',
                         block.completed ? 'is-done' : '',
-                        block.edited ? 'is-edited' : '',
                         onReschedule && !block.running ? 'is-draggable' : '',
                         grab?.block.id === block.id ? 'is-grabbed' : '',
                       ]
@@ -217,9 +216,7 @@ export default function Timeline({
                         left: `${lane * width}%`,
                         width: `${width}%`,
                       }}
-                      title={`${block.title} — ${range}${
-                        block.edited ? ' (edited)' : ''
-                      }`}
+                      title={`${block.title} — ${range}`}
                       data-color={block.color ?? undefined}
                       onContextMenu={(e) => {
                         if (!onMenu) return
@@ -245,10 +242,7 @@ export default function Timeline({
                       }}
                     >
                       <span className="block-title">{block.title}</span>
-                      <span className="block-time">
-                        {range}
-                        {block.edited && ' · edited'}
-                      </span>
+                      <span className="block-time">{range}</span>
 
                       {onReschedule && !block.running && (
                         <>

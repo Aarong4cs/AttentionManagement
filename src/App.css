@@ -454,12 +454,6 @@ input[type='checkbox'] {
   opacity: 0.75;
 }
 
-/* a reconstructed end time, not an observed one */
-.block.is-edited {
-  border-style: dashed;
-  border-color: var(--trail-fg);
-}
-
 .block-title {
   font-weight: 500;
   white-space: nowrap;
@@ -912,13 +906,16 @@ input[type='number'] {
   border: 2px solid transparent;
   background: var(--task, var(--field));
 }
+/*
+ * "Default" is not one colour: a planned block is violet and an observed one is
+ * green. Showing both halves says that; the hatch pattern it replaced read as a
+ * texture rather than as a choice.
+ */
 .swatch.default {
-  background: repeating-linear-gradient(
-    45deg,
-    var(--field),
-    var(--field) 3px,
-    var(--line) 3px,
-    var(--line) 6px
+  background: linear-gradient(
+    135deg,
+    var(--sched-line) 0 50%,
+    var(--trail) 50% 100%
   );
 }
 .swatch.on {

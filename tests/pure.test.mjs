@@ -384,4 +384,40 @@ check('snapping survives a drag that lands mid-step', () => {
   assert.equal(r.start.toISOString(), '2026-06-10T13:05:00.000Z')
 })
 
+
+
+console.log('\napplying ops over their own result')
+check('createTask does not duplicate a task already in the snapshot', () => {
+  const t = task('a')
+  const op = { op: 'createTask', at: 'x', task: t }
+  // the snapshot arrives from the server already containing it
+  const s = applyOps(snap({ tasks: [t] }), [op])
+  assert.equal(s.tasks.filter(x => x.id === 'a').length, 1)
+})
+check('startTrail does not duplicate an entry already in the snapshot', () => {
+  const entry = {
+    id: 'e1', user_id: 'u', task_id: 'a', started_at: '2026-06-10T09:00:00Z',
+    ended_at: null, edited_at: null, deleted_at: null,
+    created_at: 'x', updated_at: 'x', duration_seconds: null,
+    title: 'a', taskCompleted: false, color: null,
+  }
+  const op = { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a',
+               startedAt: '2026-06-10T09:00:00Z' }
+  const s = applyOps(snap({ tasks: [task('a')], entries: [entry] }), [op])
+  assert.equal(s.entries.filter(e => e.id === 'e1').length, 1)
+  assert.equal(s.running.id, 'e1', 'still recognised as the running one')
+})
+check('a stopped entry from the server is not resurrected as running', () => {
+  const stopped = {
+    id: 'e1', user_id: 'u', task_id: 'a', started_at: '2026-06-10T09:00:00Z',
+    ended_at: '2026-06-10T10:00:00Z', edited_at: null, deleted_at: null,
+    created_at: 'x', updated_at: 'x', duration_seconds: 3600,
+    title: 'a', taskCompleted: false, color: null,
+  }
+  const s = applyOps(snap({ tasks: [task('a')], entries: [stopped] }), [
+    { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' },
+  ])
+  assert.equal(s.running, null)
+})
+
 console.log(`\n${n} assertions passed\n`)

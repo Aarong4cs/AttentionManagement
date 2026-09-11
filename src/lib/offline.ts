@@ -107,7 +107,12 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
   for (const op of ops) {
     switch (op.op) {
       case 'createTask':
-        s.tasks = [...s.tasks, op.task]
+        // Idempotent: the queue is held until the snapshot that already
+        // contains these writes arrives, so an op can legitimately be applied
+        // on top of its own result. Appending blindly would double the row.
+        if (!s.tasks.some((t) => t.id === op.task.id)) {
+          s.tasks = [...s.tasks, op.task]
+        }
         break
 
       case 'moveTask':
@@ -140,6 +145,13 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
         break
 
       case 'startTrail': {
+        if (s.entries.some((e) => e.id === op.entryId)) {
+          // already present from the server; just make sure it is the running
+          // one, since a fetched row carries no notion of "current"
+          const existing = s.entries.find((e) => e.id === op.entryId)!
+          if (existing.ended_at === null) s.running = existing
+          break
+        }
         const task =
           s.tasks.find((t) => t.id === op.taskId) ??
           s.rangeTasks.find((t) => t.id === op.taskId)

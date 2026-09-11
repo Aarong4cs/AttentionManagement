@@ -72,8 +72,6 @@ export function useOfflineData(
       // push before pulling, so the server state we cache already contains
       // our own pending writes rather than reverting them on screen
       const result = await flush()
-      queueRef.current = loadQueue()
-      setQueue(queueRef.current)
       // a stalled queue means the server could not be reached, whatever
       // navigator.onLine claims; say "offline" rather than "syncing"
       if (result.stalled) setOnline(false)
@@ -88,12 +86,27 @@ export function useOfflineData(
       }
 
       const fresh = await fetchSnapshot(today, new Date(startMs), new Date(endMs))
+
+      /*
+       * Drop the drained operations and install the new snapshot TOGETHER.
+       * Clearing the queue first leaves a window where the ops are gone but the
+       * snapshot predates them, and the view reverts for exactly that long —
+       * which looked like a block snapping back to its old position after every
+       * drag. applyOps tolerates being run over its own result, so holding the
+       * queue across the fetch is safe.
+       */
+      queueRef.current = loadQueue()
       setSnapshot(fresh)
+      setQueue(queueRef.current)
       saveSnapshot(fresh)
       setCold(false)
       setOnline(true)
       if (result.rejected.length === 0 && !result.stallReason) setError(null)
     } catch (e) {
+      // the fetch failed, so no fresh snapshot is coming: fall back to whatever
+      // the queue actually is now, rather than leaving drained ops applied
+      queueRef.current = loadQueue()
+      setQueue(queueRef.current)
       // navigator.onLine only reports whether a network interface is up — it
       // says true on a wifi network with no internet behind it. Whether the
       // fetch actually completed is the only reliable signal, so reachability
