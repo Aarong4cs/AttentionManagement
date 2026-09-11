@@ -30,20 +30,43 @@ async function bearer(): Promise<string | null> {
   return data.session?.access_token ?? null
 }
 
+/**
+ * Call a server route, refreshing the session once if it is rejected.
+ *
+ * getSession() returns whatever is in storage, which after an hour is an
+ * expired access token — the server then refuses it and the sheet shows a bare
+ * 401 while the app around it still looks signed in. Refreshing and retrying
+ * once turns that into nothing the user ever sees.
+ */
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const send = async (token: string) =>
+    fetch(path, {
+      ...init,
+      headers: { ...(init?.headers ?? {}), authorization: `Bearer ${token}` },
+    })
+
   const token = await bearer()
   if (!token) throw new Error('not signed in')
-  const res = await fetch(path, {
-    ...init,
-    headers: { ...(init?.headers ?? {}), authorization: `Bearer ${token}` },
-  })
+
+  let res = await send(token)
+
+  if (res.status === 401) {
+    const { data, error } = await supabase.auth.refreshSession()
+    const fresh = data.session?.access_token
+    if (error || !fresh) throw new Error('session expired — sign in again')
+    res = await send(fresh)
+  }
+
   if (!res.ok) throw new Error(`${path} ${res.status}`)
   return (await res.json()) as T
 }
 
 /** A top-level navigation, so the token rides in the URL rather than a header. */
 export async function connectUrl(): Promise<string> {
-  const token = await bearer()
+  // A stale token here sends the user to Google and fails at the callback,
+  // after they have already granted consent — refresh before leaving the page.
+  const { data } = await supabase.auth.refreshSession()
+  const token = data.session?.access_token ?? (await bearer())
   if (!token) throw new Error('not signed in')
   return `/api/google/connect?token=${encodeURIComponent(token)}`
 }
