@@ -6,6 +6,11 @@
   --line: #e2e2dd;
   --ok: #1f7a4d;
   --err: #a32b1c;
+  --field: #ffffff;
+  --trail: #1f5f4f;
+  --trail-fg: #f2fbf7;
+  --warn-bg: #fdf5e3;
+  --warn-line: #e4d3a4;
 
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   line-height: 1.5;
@@ -19,6 +24,11 @@
     --line: #2e2e33;
     --ok: #57c48a;
     --err: #e2705f;
+    --field: #1e1e23;
+    --trail: #2f7d68;
+    --trail-fg: #f2fbf7;
+    --warn-bg: #2c2718;
+    --warn-line: #4d442a;
   }
 }
 

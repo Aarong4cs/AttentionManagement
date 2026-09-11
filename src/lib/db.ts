@@ -7,7 +7,7 @@
  */
 
 import { supabase } from './supabase'
-import { rankBetween } from './rank'
+import { rankAppend, rankBetween } from './rank'
 import { clippedMs } from './time'
 import { MAX_ESTIMATE_MINUTES, STALE_TIMER_HOURS } from './constants'
 import type { Rank } from './rank'
@@ -314,4 +314,39 @@ export async function clearCompleted(): Promise<Uuid[]> {
     .select('id')
   if (error) throw error
   return (data ?? []).map((t) => t.id)
+}
+
+/** Append a new sequence task after everything currently in the pane. */
+export async function createTask(title: string): Promise<Task> {
+  const { data: existing, error: readError } = await supabase
+    .from('tasks')
+    .select('rank')
+    .is('due_at', null)
+    .is('deleted_at', null)
+    .order('rank')
+  if (readError) throw readError
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({
+      id: newId(),
+      title,
+      rank: rankAppend((existing ?? []).map((t) => t.rank)),
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+/** Undo a completion. The auto-stop trigger does not reopen the closed entry. */
+export async function uncompleteTask(taskId: Uuid): Promise<Task> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ completed_at: null })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
