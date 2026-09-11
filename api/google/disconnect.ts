@@ -1,4 +1,4 @@
-import { admin, json, unauthorised, userFromRequest } from '../_lib/auth.ts'
+import { admin, json, unauthorised, userFromRequest } from '../_lib/auth.js'
 
 /**
  * Forget the connection and everything it mirrored.

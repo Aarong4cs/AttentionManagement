@@ -1,5 +1,5 @@
-import { userFromRequest, unauthorised } from '../_lib/auth.ts'
-import { consentUrl } from '../_lib/google.ts'
+import { userFromRequest, unauthorised } from '../_lib/auth.js'
+import { consentUrl } from '../_lib/google.js'
 
 /**
  * Start the consent flow.

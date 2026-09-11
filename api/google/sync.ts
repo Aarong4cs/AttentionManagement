@@ -1,11 +1,11 @@
-import { admin, json, unauthorised, userFromRequest } from '../_lib/auth.ts'
+import { admin, json, unauthorised, userFromRequest } from '../_lib/auth.js'
 import {
   SyncTokenExpired,
   accessToken,
   listEvents,
-} from '../_lib/google.ts'
-import { mapEvent, syncWindow, windowChanged, type GoogleEvent } from '../../src/lib/gcal.ts'
-import { pushEntries } from '../_lib/push.ts'
+} from '../_lib/google.js'
+import { mapEvent, syncWindow, windowChanged, type GoogleEvent } from '../../src/lib/gcal.js'
+import { pushEntries } from '../_lib/push.js'
 
 interface CalendarRow {
   calendar_id: string

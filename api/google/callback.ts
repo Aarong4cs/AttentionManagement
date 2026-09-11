@@ -1,5 +1,5 @@
-import { admin, userFromRequest } from '../_lib/auth.ts'
-import { accessToken, exchangeCode, listCalendars } from '../_lib/google.ts'
+import { admin, userFromRequest } from '../_lib/auth.js'
+import { accessToken, exchangeCode, listCalendars } from '../_lib/google.js'
 
 const home = () => (process.env.PUBLIC_BASE_URL ?? '').replace(/\/$/, '') || '/'
 

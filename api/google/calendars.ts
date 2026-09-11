@@ -1,5 +1,5 @@
-import { admin, json, unauthorised, userFromRequest } from '../_lib/auth.ts'
-import { accessToken, listCalendars } from '../_lib/google.ts'
+import { admin, json, unauthorised, userFromRequest } from '../_lib/auth.js'
+import { accessToken, listCalendars } from '../_lib/google.js'
 
 /** Refresh the calendar list from Google, preserving which are enabled. */
 export async function GET(req: Request): Promise<Response> {

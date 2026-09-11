@@ -13,14 +13,14 @@ import {
   deleteEvent,
   insertEvent,
   updateEvent,
-} from './google.ts'
+} from './google.js'
 import {
   PUSH_CALENDAR_NAME,
   pushAction,
   taskAsPushable,
   type PushableEntry,
-} from '../../src/lib/gcal.ts'
-import type { admin } from './auth.ts'
+} from '../../src/lib/gcal.js'
+import type { admin } from './auth.js'
 
 type Db = ReturnType<typeof admin>
 

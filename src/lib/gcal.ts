@@ -7,10 +7,8 @@
  * without any of the machinery around it.
  */
 
-// explicit extension: this module is imported directly by the node test
-// runner, which does not resolve extensionless relative paths the way Vite does
-import { MAX_ESTIMATE_MINUTES } from './constants.ts'
-import type { DateOnly } from './types'
+import { MAX_ESTIMATE_MINUTES } from './constants.js'
+import type { DateOnly } from './types.js'
 
 /** Only the fields this app reads. Google sends a great deal more. */
 export interface GoogleEvent {
