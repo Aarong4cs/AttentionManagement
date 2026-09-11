@@ -58,4 +58,9 @@ export interface Block {
   color: string | null
   /** 'google' for a mirrored event, null for something you own. */
   source: string | null
+  /**
+   * The final trailed block of a task that is now complete — the moment the
+   * work actually finished. Only one block per task ever carries this.
+   */
+  completesTask: boolean
 }

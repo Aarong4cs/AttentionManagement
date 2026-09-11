@@ -271,7 +271,30 @@ export function buildBlocks(snapshot: Snapshot): Block[] {
       edited: false,
       color: t.color,
       source: t.source,
+      // a scheduled block is a plan, never the record of finishing something
+      completesTask: false,
     }))
+
+  /*
+   * Which trailed block finished each completed task.
+   *
+   * "Last" is by start time rather than end: a running block has no end, and
+   * comparing nulls would pick arbitrarily. Ties fall back to the id so the
+   * choice is stable between renders rather than flickering between two blocks
+   * that began in the same millisecond.
+   */
+  const finisher = new Map<string, string>()
+  for (const e of snapshot.entries) {
+    if (!e.taskCompleted) continue
+    const best = snapshot.entries.find((x) => x.id === finisher.get(e.task_id))
+    if (
+      !best ||
+      e.started_at > best.started_at ||
+      (e.started_at === best.started_at && e.id > best.id)
+    ) {
+      finisher.set(e.task_id, e.id)
+    }
+  }
 
   const trailed: Block[] = snapshot.entries.map((e) => ({
     kind: 'trailed' as const,
@@ -286,6 +309,7 @@ export function buildBlocks(snapshot: Snapshot): Block[] {
     color: e.color,
     // a trailed block is always something you did, never a mirrored event
     source: null,
+    completesTask: finisher.get(e.task_id) === e.id,
   }))
 
   return [...scheduled, ...trailed]

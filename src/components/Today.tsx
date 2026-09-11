@@ -319,23 +319,6 @@ export default function Today({ email }: { email: string }) {
         </p>
       )}
 
-      {snap.running && (
-        <section className="running">
-          <span className="dot" aria-hidden="true" />
-          <span className="what">{runningTask?.title ?? 'Running'}</span>
-          <span className="clock">{hhmmss(elapsedMs(snap.running, now))}</span>
-          <button className="stop" onClick={() => runningTask && toggle(runningTask)}>
-            Stop
-          </button>
-        </section>
-      )}
-
-      {snap.running && isStale(snap.running, now) && (
-        <p className="warn">
-          Running over {STALE_TIMER_HOURS} hours — did you forget to stop it?
-        </p>
-      )}
-
       <nav className="tabs">
         <button className={tab === 'timeline' ? 'on' : ''} onClick={() => setTab('timeline')}>
           Timeline
@@ -375,6 +358,28 @@ export default function Today({ email }: { email: string }) {
             })
           }
           onMenu={openTaskMenu}
+          running={
+            snap.running ? (
+              <>
+                <section className="running">
+                  <span className="dot" aria-hidden="true" />
+                  <span className="what">{runningTask?.title ?? 'Running'}</span>
+                  <span className="clock">{hhmmss(elapsedMs(snap.running, now))}</span>
+                  <button
+                    className="stop"
+                    onClick={() => runningTask && toggle(runningTask)}
+                  >
+                    Stop
+                  </button>
+                </section>
+                {isStale(snap.running, now) && (
+                  <p className="warn">
+                    Running over {STALE_TIMER_HOURS} hours — did you forget to stop it?
+                  </p>
+                )}
+              </>
+            ) : null
+          }
           onRename={(taskId, title) =>
             enqueue({ op: 'renameTask', at: new Date().toISOString(), taskId, title })
           }

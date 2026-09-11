@@ -42,8 +42,12 @@ export interface FlushResult {
   stallReason: string | null
 }
 
-/** Postgres codes that mean "this will never succeed": constraint violations. */
+/** Codes that mean "this will never succeed" — retrying only stalls the queue. */
 const PERMANENT = new Set([
+  // PostgREST: an update matched no rows. Belt and braces alongside the
+  // maybeSingle() calls in db.ts, because one of these stalling the queue takes
+  // every later write down with it.
+  'PGRST116',
   '23514', // check_violation — e.g. trailing a scheduled task
   '23502', // not_null_violation
   '23503', // foreign_key_violation — the task was deleted elsewhere

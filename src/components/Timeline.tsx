@@ -330,7 +330,12 @@ export default function Timeline({
                           ◷
                         </span>
                       )}
-                      <span className="block-title">{block.title}</span>
+                      <span className="block-title">
+                        {block.title}
+                        {block.completesTask && (
+                          <span className="done-badge"> (COMPLETED)</span>
+                        )}
+                      </span>
                       <span className="block-time">{range}</span>
 
                       {canDrag && (

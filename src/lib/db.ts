@@ -120,17 +120,27 @@ export async function startTrailAt(
   return data
 }
 
+/**
+ * Stop a running entry.
+ *
+ * The guard keeps this from re-closing an entry at a later time than it really
+ * ended, but that means the update legitimately matches nothing — the auto-stop
+ * trigger closes the entry when its task is completed, so a queued stop can
+ * arrive to find the work already done. That is success, not failure: with
+ * .single() it raised PGRST116, which is not a constraint violation, so the
+ * offline queue treated it as retryable and stalled permanently behind it.
+ */
 export async function stopTrail(
   entryId: Uuid,
   endedAt: Date = new Date(),
-): Promise<TimeEntry> {
+): Promise<TimeEntry | null> {
   const { data, error } = await supabase
     .from('time_entries')
     .update({ ended_at: endedAt.toISOString() })
     .eq('id', entryId)
-    .is('ended_at', null) // don't silently re-close an already-stopped entry
+    .is('ended_at', null)
     .select()
-    .single()
+    .maybeSingle()
   if (error) throw error
   return data
 }
@@ -358,14 +368,16 @@ export async function moveTask(
 export async function completeTask(
   taskId: Uuid,
   completedAt: Date = new Date(),
-): Promise<Task> {
+): Promise<Task | null> {
   const { data, error } = await supabase
     .from('tasks')
     .update({ completed_at: completedAt.toISOString() })
     .eq('id', taskId)
-    .is('completed_at', null) // keep the trigger's old.completed_at IS NULL guard meaningful
+    // keeps the trigger's old.completed_at IS NULL guard meaningful. Matching
+    // nothing means it was already complete, which is the desired end state.
+    .is('completed_at', null)
     .select()
-    .single()
+    .maybeSingle()
   if (error) throw error
   return data
 }

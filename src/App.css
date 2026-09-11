@@ -1127,3 +1127,17 @@ button.title:hover {
 .push .rule-text .muted {
   font-size: 0.75rem;
 }
+
+/* the block that finished a task ---------------------------------------- */
+
+.done-badge {
+  font-weight: 600;
+  opacity: 0.85;
+  letter-spacing: 0.02em;
+}
+
+/* the running banner now lives in the sequence pane, so it should not also
+   claim the full page width */
+.sequence .running {
+  margin: 0;
+}

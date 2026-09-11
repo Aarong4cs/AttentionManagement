@@ -108,3 +108,25 @@ describe('flush', () => {
     expect(loadQueue()).toEqual([])
   })
 })
+
+describe('a guarded update that matches nothing', () => {
+  it('does not stall the queue behind it', async () => {
+    const db = await import('../src/lib/db')
+    // exactly what stopTrail used to raise when the auto-stop trigger had
+    // already closed the entry
+    vi.mocked(db.stopTrail).mockRejectedValueOnce(
+      Object.assign(new Error('JSON object requested, multiple (or no) rows returned'), {
+        code: 'PGRST116',
+      }),
+    )
+    saveQueue([
+      { op: 'stopTrail', at: 'x', entryId: 'e1', endedAt: '2026-06-10T10:00:00Z' },
+      move('a'),
+    ])
+    const result = await flush()
+
+    expect(result.stalled).toBe(false)
+    expect(ran).toContain('moveTask')
+    expect(loadQueue()).toEqual([])
+  })
+})

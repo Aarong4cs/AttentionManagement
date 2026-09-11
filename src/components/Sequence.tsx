@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type PointerEvent } from 'react'
+import { useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from 'react'
 import { insertionIndex } from '../lib/layout'
 import { useLongPress } from '../hooks/useLongPress'
 import type { Task, Uuid } from '../lib/types'
@@ -15,6 +15,7 @@ export default function Sequence({
   onMove,
   onMenu,
   onRename,
+  running,
 }: {
   tasks: readonly Task[]
   runningTaskId: Uuid | null
@@ -28,6 +29,8 @@ export default function Sequence({
   onMove: (taskId: Uuid, before: Task | null, after: Task | null) => void
   onMenu: (task: Task, x: number, y: number) => void
   onRename: (taskId: Uuid, title: string) => void
+  /** The running-timer banner, rendered here so it sits above the add form. */
+  running?: ReactNode
 }) {
   const rows = useRef(new Map<Uuid, HTMLLIElement>())
   const [dragId, setDragId] = useState<Uuid | null>(null)
@@ -81,6 +84,8 @@ export default function Sequence({
 
   return (
     <section className="pane sequence">
+      {running}
+
       <form className="add" onSubmit={onAdd}>
         <input
           value={title}

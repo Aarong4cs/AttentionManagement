@@ -629,4 +629,49 @@ check('moving a block updates its pushed event', () => {
   assert.equal(a.start, '2026-06-10T15:00:00Z')
 })
 
+
+
+console.log('\nthe block that completed a task')
+const en = (id, taskId, started, done) => ({
+  id, user_id:'u', task_id:taskId, started_at:started, ended_at:started,
+  edited_at:null, deleted_at:null, created_at:'x', updated_at:'x',
+  duration_seconds:60, title:taskId, taskCompleted:done, color:null,
+  google_event_id:null, google_synced_at:null,
+})
+const marked = (entries) => buildBlocks(snap({ entries }))
+  .filter(b => b.completesTask).map(b => b.id)
+
+check('only the latest block of a completed task is marked', () => {
+  assert.deepEqual(marked([
+    en('a','t1','2026-06-10T09:00:00Z', true),
+    en('b','t1','2026-06-10T11:00:00Z', true),
+    en('c','t1','2026-06-10T10:00:00Z', true),
+  ]), ['b'])
+})
+check('an unfinished task marks nothing', () => {
+  assert.deepEqual(marked([
+    en('a','t1','2026-06-10T09:00:00Z', false),
+    en('b','t1','2026-06-10T11:00:00Z', false),
+  ]), [])
+})
+check('each completed task marks its own last block', () => {
+  const got = marked([
+    en('a','t1','2026-06-10T09:00:00Z', true),
+    en('b','t1','2026-06-10T10:00:00Z', true),
+    en('c','t2','2026-06-10T08:00:00Z', true),
+  ])
+  assert.deepEqual(got.sort(), ['b','c'])
+})
+check('a tie on start time resolves stably rather than flickering', () => {
+  const first  = marked([en('a','t1','2026-06-10T09:00:00Z',true), en('b','t1','2026-06-10T09:00:00Z',true)])
+  const second = marked([en('b','t1','2026-06-10T09:00:00Z',true), en('a','t1','2026-06-10T09:00:00Z',true)])
+  assert.deepEqual(first, second, 'input order must not change the answer')
+})
+check('a scheduled block is never the finisher', () => {
+  const s = snap({ rangeTasks: [task('s', {
+    due_at:'2026-06-10T13:00:00Z', estimated_minutes:30,
+    scheduled_end:'2026-06-10T13:30:00Z', completed_at:'x' })] })
+  assert.equal(buildBlocks(s).every(b => !b.completesTask), true)
+})
+
 console.log(`\n${n} assertions passed\n`)
