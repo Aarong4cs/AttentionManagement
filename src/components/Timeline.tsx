@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { layoutDay, nowOffset } from '../lib/layout'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { dragBlock, layoutDay, nowOffset } from '../lib/layout'
 import { formatRange } from '../lib/time'
 import type { Block } from '../lib/types'
 
@@ -38,19 +38,83 @@ export interface TimelineDay {
  * One scroller, N day columns. The day view is simply the one-column case, so
  * both views share all of this and the single range query that feeds it.
  */
+type Grab = {
+  block: Block
+  mode: 'move' | 'start' | 'end'
+  originY: number
+  /** ms represented by one pixel, measured from the rendered column */
+  msPerPx: number
+  start: Date
+  end: Date
+}
+
 export default function Timeline({
   days,
   blocks,
   now,
   tz,
+  onReschedule,
+  onDelete,
 }: {
   days: readonly TimelineDay[]
   blocks: readonly Block[]
   now: Date
   tz: string
+  onReschedule?: (block: Block, start: Date, end: Date) => void
+  onDelete?: (block: Block) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
+  const [grab, setGrab] = useState<Grab | null>(null)
+  const [preview, setPreview] = useState<{ start: Date; end: Date } | null>(null)
+
+  /**
+   * Pointer events, as with the sequence: HTML5 drag-and-drop does not fire on
+   * iOS. The pixel-to-time scale is measured from the column actually rendered
+   * rather than assumed, so it stays correct at any zoom or viewport.
+   */
+  function beginDrag(
+    e: ReactPointerEvent<HTMLElement>,
+    block: Block,
+    mode: Grab['mode'],
+    day: TimelineDay,
+  ) {
+    if (!onReschedule || block.running) return
+    e.preventDefault()
+    e.stopPropagation()
+    const column = (e.currentTarget as HTMLElement).closest('.tl-col')
+    if (!column) return
+    const height = column.getBoundingClientRect().height
+    if (height <= 0) return
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    setGrab({
+      block,
+      mode,
+      originY: e.clientY,
+      msPerPx: (day.end.getTime() - day.start.getTime()) / height,
+      start: block.start,
+      end: block.end ?? now,
+    })
+    setPreview({ start: block.start, end: block.end ?? now })
+  }
+
+  function moveDrag(e: ReactPointerEvent<HTMLElement>) {
+    if (!grab) return
+    const deltaMs = (e.clientY - grab.originY) * grab.msPerPx
+    setPreview(dragBlock(grab.start, grab.end, deltaMs, grab.mode))
+  }
+
+  function endDrag(e: ReactPointerEvent<HTMLElement>) {
+    if (grab && preview) {
+      const moved =
+        preview.start.getTime() !== grab.start.getTime() ||
+        preview.end.getTime() !== grab.end.getTime()
+      if (moved) onReschedule?.(grab.block, preview.start, preview.end)
+    }
+    ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+    setGrab(null)
+    setPreview(null)
+  }
 
   const todayCol = days.find((d) => d.isToday)
   const marker = todayCol ? nowOffset(todayCol.start, todayCol.end, now) : null
@@ -100,7 +164,16 @@ export default function Timeline({
           </div>
 
           {days.map((d) => {
-            const positioned = layoutDay(blocks, d.start, d.end, now)
+            // while dragging, lay out against the previewed times so the block
+            // follows the pointer instead of snapping back on release
+            const shown = grab && preview
+              ? blocks.map((b) =>
+                  b.kind === grab.block.kind && b.id === grab.block.id
+                    ? { ...b, start: preview.start, end: preview.end }
+                    : b,
+                )
+              : blocks
+            const positioned = layoutDay(shown, d.start, d.end, now)
             return (
               <div key={d.key} className={d.isToday ? 'tl-col is-today' : 'tl-col'}>
                 {HOURS.map((h) => (
@@ -123,6 +196,8 @@ export default function Timeline({
                         block.running ? 'is-running' : '',
                         block.completed ? 'is-done' : '',
                         block.edited ? 'is-edited' : '',
+                        onReschedule && !block.running ? 'is-draggable' : '',
+                        grab?.block.id === block.id ? 'is-grabbed' : '',
                       ]
                         .filter(Boolean)
                         .join(' ')}
@@ -135,12 +210,50 @@ export default function Timeline({
                       title={`${block.title} — ${range}${
                         block.edited ? ' (edited)' : ''
                       }`}
+                      onPointerDown={(e) => beginDrag(e, block, 'move', d)}
+                      onPointerMove={moveDrag}
+                      onPointerUp={endDrag}
+                      onPointerCancel={endDrag}
                     >
                       <span className="block-title">{block.title}</span>
                       <span className="block-time">
                         {range}
                         {block.edited && ' · edited'}
                       </span>
+
+                      {onReschedule && !block.running && (
+                        <>
+                          <span
+                            className="grab-edge top"
+                            onPointerDown={(e) => beginDrag(e, block, 'start', d)}
+                            onPointerMove={moveDrag}
+                            onPointerUp={endDrag}
+                            onPointerCancel={endDrag}
+                          />
+                          <span
+                            className="grab-edge bottom"
+                            onPointerDown={(e) => beginDrag(e, block, 'end', d)}
+                            onPointerMove={moveDrag}
+                            onPointerUp={endDrag}
+                            onPointerCancel={endDrag}
+                          />
+                        </>
+                      )}
+
+                      {onDelete && (
+                        <button
+                          className="block-delete"
+                          aria-label={`Delete ${block.title}`}
+                          // the block itself begins a drag on pointerdown
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onDelete(block)
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </div>
                   )
                 })}

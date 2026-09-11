@@ -3,12 +3,13 @@ import { supabase } from '../lib/supabase'
 import { useNow } from '../hooks/useNow'
 import { useOfflineData } from '../hooks/useOfflineData'
 import { elapsedMs, getProfile, isStale, newId } from '../lib/db'
+import { minutesBetween } from '../lib/layout'
 import { buildBlocks, clearLocal, loadSnapshot } from '../lib/offline'
 import { rankAppend, rankBetween } from '../lib/rank'
 import { materializeAll } from '../lib/recurrence'
 import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
 import { addDays, startOfWeek, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
-import type { Task } from '../lib/types'
+import type { Block, Task } from '../lib/types'
 import Timeline, { type TimelineDay } from './Timeline'
 import Sequence from './Sequence'
 import Recurrences from './Recurrences'
@@ -115,6 +116,45 @@ export default function Today({ email }: { email: string }) {
       taskId: task.id,
       startedAt: at,
     })
+  }
+
+  /**
+   * A scheduled block is a task's due_at plus its estimate; a trailed block is
+   * an entry's two timestamps. Same gesture, different rows.
+   */
+  function onReschedule(block: Block, start: Date, end: Date) {
+    const at = new Date().toISOString()
+    enqueue(
+      block.kind === 'scheduled'
+        ? {
+            op: 'rescheduleTask',
+            at,
+            taskId: block.taskId,
+            startedAt: start.toISOString(),
+            minutes: minutesBetween(start, end),
+          }
+        : {
+            op: 'adjustEntry',
+            at,
+            entryId: block.id,
+            startedAt: start.toISOString(),
+            endedAt: end.toISOString(),
+          },
+    )
+  }
+
+  /**
+   * Deleting a scheduled block removes the task; deleting a trailed block
+   * removes only that record of time, leaving the task alone. Both are soft
+   * deletes, so a trailed block's task keeps the rest of its history.
+   */
+  function onDeleteBlock(block: Block) {
+    const at = new Date().toISOString()
+    enqueue(
+      block.kind === 'scheduled'
+        ? { op: 'deleteTask', at, taskId: block.taskId }
+        : { op: 'deleteEntry', at, entryId: block.id },
+    )
   }
 
   function onComplete(task: Task) {
@@ -242,7 +282,14 @@ export default function Today({ email }: { email: string }) {
 
       <div className={`panes show-${tab}`}>
         <section className="pane timeline-pane">
-          <Timeline days={columns} blocks={blocks} now={now} tz={tz} />
+          <Timeline
+            days={columns}
+            blocks={blocks}
+            now={now}
+            tz={tz}
+            onReschedule={onReschedule}
+            onDelete={onDeleteBlock}
+          />
         </section>
 
         <Sequence

@@ -414,3 +414,50 @@ export async function createTaskRow(task: Task): Promise<Task> {
   if (error) throw error
   return data
 }
+
+/** Move or resize a scheduled block: due_at is the start, the estimate the length. */
+export async function rescheduleTask(
+  taskId: Uuid,
+  start: Date,
+  minutes: number,
+): Promise<Task> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ due_at: start.toISOString(), estimated_minutes: minutes })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+/**
+ * Correct a trailed block's times.
+ *
+ * The mark_entry_edited trigger sets edited_at for this, because the new times
+ * were reconstructed rather than observed, and the renderer draws such a block
+ * differently. Nothing here needs to say so.
+ */
+export async function adjustEntry(
+  entryId: Uuid,
+  start: Date,
+  end: Date,
+): Promise<TimeEntry> {
+  const { data, error } = await supabase
+    .from('time_entries')
+    .update({ started_at: start.toISOString(), ended_at: end.toISOString() })
+    .eq('id', entryId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+/** Soft-delete one trailed block, leaving its task alone. */
+export async function deleteEntry(entryId: Uuid): Promise<void> {
+  const { error } = await supabase
+    .from('time_entries')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', entryId)
+  if (error) throw error
+}

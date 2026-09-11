@@ -50,6 +50,15 @@ export type PendingOp =
   | { op: 'clearCompleted'; at: string; taskIds: Uuid[] }
   | { op: 'startTrail'; at: string; entryId: Uuid; taskId: Uuid; startedAt: string }
   | { op: 'stopTrail'; at: string; entryId: Uuid; endedAt: string }
+  | {
+      op: 'rescheduleTask'
+      at: string
+      taskId: Uuid
+      startedAt: string
+      minutes: number
+    }
+  | { op: 'adjustEntry'; at: string; entryId: Uuid; startedAt: string; endedAt: string }
+  | { op: 'deleteEntry'; at: string; entryId: Uuid }
 
 // ---------------------------------------------------------------------------
 // the optimistic view
@@ -152,6 +161,40 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
 
       case 'stopTrail':
         stopEntry(op.entryId, op.endedAt)
+        break
+
+      case 'rescheduleTask':
+        patchTask(op.taskId, {
+          due_at: op.startedAt,
+          estimated_minutes: op.minutes,
+          // trigger-maintained on the server; mirrored so the block redraws at
+          // its new length immediately rather than after the next fetch
+          scheduled_end: new Date(
+            new Date(op.startedAt).getTime() + op.minutes * 60_000,
+          ).toISOString(),
+        })
+        break
+
+      case 'adjustEntry':
+        s.entries = s.entries.map((e) =>
+          e.id === op.entryId
+            ? {
+                ...e,
+                started_at: op.startedAt,
+                ended_at: op.endedAt,
+                // mirrors mark_entry_edited: these times were reconstructed
+                edited_at: op.at,
+              }
+            : e,
+        )
+        if (s.running?.id === op.entryId) s.running = null
+        break
+
+      case 'deleteEntry':
+        s.entries = s.entries.map((e) =>
+          e.id === op.entryId ? { ...e, deleted_at: op.at } : e,
+        )
+        if (s.running?.id === op.entryId) s.running = null
         break
     }
   }

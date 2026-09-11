@@ -704,3 +704,89 @@ input[type='number'] {
   background: var(--field);
   color: var(--muted);
 }
+
+/* dragging and deleting blocks ----------------------------------------- */
+
+.block.is-draggable {
+  cursor: grab;
+  /* or a vertical drag scrolls the timeline instead of moving the block */
+  touch-action: none;
+}
+.block.is-grabbed {
+  cursor: grabbing;
+  z-index: 4;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+}
+
+/* generous hit areas: 10px is comfortable with a mouse and usable with a
+   thumb, without eating a short block's whole body */
+.grab-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.grab-edge.top {
+  top: -2px;
+}
+.grab-edge.bottom {
+  bottom: -2px;
+}
+
+.block:hover .grab-edge::after,
+.block.is-grabbed .grab-edge::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.6rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+.grab-edge.top::after {
+  top: 3px;
+}
+.grab-edge.bottom::after {
+  bottom: 3px;
+}
+
+.block-delete {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-height: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.3);
+  color: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.block:hover .block-delete,
+.block:focus-within .block-delete {
+  display: flex;
+}
+.block-delete:hover {
+  background: var(--err);
+  color: #fff;
+}
+
+/* a touch screen has no hover, so the control has to be permanent there */
+@media (hover: none) {
+  .block-delete {
+    display: flex;
+  }
+  .block.is-short .block-delete {
+    display: none;
+  }
+}

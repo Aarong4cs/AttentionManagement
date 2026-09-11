@@ -332,4 +332,56 @@ check('morning and evening never render identically', () => {
   }
 })
 
+
+
+// `snap` is already a local fixture helper above
+import { dragBlock, minutesBetween, snap as snapMs } from '../src/lib/layout.ts'
+
+console.log('\ndragging a block')
+const S = D('2026-06-10T13:00:00Z')
+const E = D('2026-06-10T14:00:00Z')
+const MIN = 60_000
+
+check('snaps to five minutes', () => {
+  assert.equal(new Date(snapMs(D('2026-06-10T13:02:00Z').getTime())).toISOString(),
+               '2026-06-10T13:00:00.000Z')
+  assert.equal(new Date(snapMs(D('2026-06-10T13:03:00Z').getTime())).toISOString(),
+               '2026-06-10T13:05:00.000Z')
+})
+check('moving keeps the duration', () => {
+  const r = dragBlock(S, E, 30 * MIN, 'move')
+  assert.equal(r.start.toISOString(), '2026-06-10T13:30:00.000Z')
+  assert.equal(r.end.toISOString(), '2026-06-10T14:30:00.000Z')
+  assert.equal(minutesBetween(r.start, r.end), 60)
+})
+check('moving backwards works too', () => {
+  const r = dragBlock(S, E, -90 * MIN, 'move')
+  assert.equal(r.start.toISOString(), '2026-06-10T11:30:00.000Z')
+  assert.equal(minutesBetween(r.start, r.end), 60)
+})
+check('dragging the end resizes only the end', () => {
+  const r = dragBlock(S, E, 30 * MIN, 'end')
+  assert.equal(r.start.toISOString(), S.toISOString())
+  assert.equal(minutesBetween(r.start, r.end), 90)
+})
+check('dragging the start resizes only the start', () => {
+  const r = dragBlock(S, E, 15 * MIN, 'start')
+  assert.equal(r.end.toISOString(), E.toISOString())
+  assert.equal(minutesBetween(r.start, r.end), 45)
+})
+check('an end cannot be dragged above its start', () => {
+  const r = dragBlock(S, E, -600 * MIN, 'end')
+  assert.ok(r.end > r.start, `${r.start.toISOString()} .. ${r.end.toISOString()}`)
+  assert.equal(minutesBetween(r.start, r.end), 5, 'clamped to the minimum')
+})
+check('a start cannot be dragged below its end', () => {
+  const r = dragBlock(S, E, 600 * MIN, 'start')
+  assert.ok(r.end > r.start)
+  assert.equal(minutesBetween(r.start, r.end), 5)
+})
+check('snapping survives a drag that lands mid-step', () => {
+  const r = dragBlock(S, E, 7 * MIN, 'move')
+  assert.equal(r.start.toISOString(), '2026-06-10T13:05:00.000Z')
+})
+
 console.log(`\n${n} assertions passed\n`)

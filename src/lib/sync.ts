@@ -12,10 +12,13 @@
 import { supabase } from './supabase'
 import {
   UNIQUE_VIOLATION,
+  adjustEntry,
   completeTask,
   createTaskRow,
+  deleteEntry,
   deleteTask,
   moveTask,
+  rescheduleTask,
   startTrailAt,
   stopTrail,
   uncompleteTask,
@@ -84,6 +87,15 @@ async function run(op: PendingOp): Promise<void> {
       return
     case 'stopTrail':
       await stopTrail(op.entryId, new Date(op.endedAt))
+      return
+    case 'rescheduleTask':
+      await rescheduleTask(op.taskId, new Date(op.startedAt), op.minutes)
+      return
+    case 'adjustEntry':
+      await adjustEntry(op.entryId, new Date(op.startedAt), new Date(op.endedAt))
+      return
+    case 'deleteEntry':
+      await deleteEntry(op.entryId)
       return
   }
 }

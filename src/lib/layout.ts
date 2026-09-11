@@ -122,3 +122,58 @@ export function insertionIndex(midpoints: readonly number[], y: number): number 
   while (i < midpoints.length && y > midpoints[i]) i++
   return i
 }
+
+/** Dragging snaps to this, so blocks land on sensible times. */
+export const SNAP_MINUTES = 5
+
+const MS = 60_000
+
+/** Round an instant to the nearest snap step. */
+export function snap(ms: number, step = SNAP_MINUTES): number {
+  const size = step * MS
+  return Math.round(ms / size) * size
+}
+
+export interface DragResult {
+  start: Date
+  end: Date
+}
+
+/**
+ * Where a block lands after dragging.
+ *
+ * `mode` is what the pointer grabbed: the body moves the whole block and keeps
+ * its length; an edge moves only that edge. Both snap, and a resize is clamped
+ * to a minimum length so a block can never be dragged inside-out into a
+ * negative duration — which the database would reject anyway (ended_at must be
+ * greater than started_at) and which would look like a vanished block first.
+ */
+export function dragBlock(
+  start: Date,
+  end: Date,
+  deltaMs: number,
+  mode: 'move' | 'start' | 'end',
+  minMinutes = SNAP_MINUTES,
+): DragResult {
+  const s = start.getTime()
+  const e = end.getTime()
+  const min = minMinutes * MS
+
+  if (mode === 'move') {
+    const shifted = snap(s + deltaMs)
+    return { start: new Date(shifted), end: new Date(shifted + (e - s)) }
+  }
+
+  if (mode === 'start') {
+    const moved = Math.min(snap(s + deltaMs), e - min)
+    return { start: new Date(moved), end: new Date(e) }
+  }
+
+  const moved = Math.max(snap(e + deltaMs), s + min)
+  return { start: new Date(s), end: new Date(moved) }
+}
+
+/** Minutes between two instants, for writing back estimated_minutes. */
+export function minutesBetween(start: Date, end: Date): number {
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / MS))
+}
