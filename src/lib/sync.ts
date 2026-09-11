@@ -1,0 +1,135 @@
+/**
+ * Replaying the offline queue.
+ *
+ * Ops go back to the server in the order they were made. A failure is either
+ * retryable (the network is still down — stop, keep the queue, try later) or
+ * permanent (the server refused it, and it will refuse it every time). A
+ * permanent failure MUST drop the op: leaving it at the head of the queue would
+ * block every later write forever, which is the classic way an offline queue
+ * quietly stops syncing.
+ */
+
+import { supabase } from './supabase'
+import {
+  UNIQUE_VIOLATION,
+  completeTask,
+  createTaskRow,
+  deleteTask,
+  moveTask,
+  startTrailAt,
+  stopTrail,
+  uncompleteTask,
+} from './db'
+import { loadQueue, saveQueue, type PendingOp } from './offline'
+
+export interface FlushResult {
+  applied: number
+  /** Ops the server refused outright; they are gone, and worth telling about. */
+  rejected: { op: PendingOp; message: string }[]
+  /** True when the queue still has work because the network is unavailable. */
+  stalled: boolean
+  /**
+   * Why the queue stopped, when it stopped for a reason other than being
+   * offline. A queue that stalls silently looks exactly like one that is
+   * working, so this must reach the UI rather than being swallowed.
+   */
+  stallReason: string | null
+}
+
+/** Postgres codes that mean "this will never succeed": constraint violations. */
+const PERMANENT = new Set([
+  '23514', // check_violation — e.g. trailing a scheduled task
+  '23502', // not_null_violation
+  '23503', // foreign_key_violation — the task was deleted elsewhere
+  '22007', // invalid datetime
+  '42501', // insufficient_privilege
+])
+
+function isPermanent(error: unknown): boolean {
+  const code = (error as { code?: string })?.code
+  if (!code) return false
+  if (PERMANENT.has(code)) return true
+  // a duplicate means the op already landed, so treat it as done, not stuck
+  return code === UNIQUE_VIOLATION
+}
+
+async function run(op: PendingOp): Promise<void> {
+  switch (op.op) {
+    case 'createTask':
+      await createTaskRow(op.task)
+      return
+    case 'moveTask':
+      await moveTask(op.taskId, null, null, op.rank)
+      return
+    case 'completeTask':
+      await completeTask(op.taskId, new Date(op.completedAt))
+      return
+    case 'uncompleteTask':
+      await uncompleteTask(op.taskId)
+      return
+    case 'deleteTask':
+      await deleteTask(op.taskId)
+      return
+    case 'clearCompleted': {
+      if (op.taskIds.length === 0) return
+      const { error } = await supabase
+        .from('tasks')
+        .update({ deleted_at: op.at })
+        .in('id', op.taskIds)
+      if (error) throw error
+      return
+    }
+    case 'startTrail':
+      await startTrailAt(op.entryId, op.taskId, new Date(op.startedAt))
+      return
+    case 'stopTrail':
+      await stopTrail(op.entryId, new Date(op.endedAt))
+      return
+  }
+}
+
+/**
+ * Push the queue to the server. Safe to call at any time; a no-op when the
+ * queue is empty or the browser reports itself offline.
+ */
+export async function flush(): Promise<FlushResult> {
+  const result: FlushResult = {
+    applied: 0,
+    rejected: [],
+    stalled: false,
+    stallReason: null,
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    result.stalled = loadQueue().length > 0
+    return result
+  }
+
+  let queue = loadQueue()
+  while (queue.length > 0) {
+    const [head, ...rest] = queue
+    try {
+      await run(head)
+      result.applied++
+    } catch (error) {
+      if (!isPermanent(error)) {
+        // still offline, or the server is unreachable: keep the queue intact
+        result.stalled = true
+        const code = (error as { code?: string })?.code
+        result.stallReason = `${head.op}: ${
+          error instanceof Error ? error.message : String(error)
+        }${code ? ` (${code})` : ''}`
+        return result
+      }
+      const code = (error as { code?: string })?.code
+      if (code !== UNIQUE_VIOLATION) {
+        result.rejected.push({
+          op: head,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+    queue = rest
+    saveQueue(queue)
+  }
+  return result
+}

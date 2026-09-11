@@ -1,0 +1,182 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { fetchSnapshot } from '../lib/db'
+import { flush } from '../lib/sync'
+import {
+  applyOps,
+  loadQueue,
+  loadSnapshot,
+  saveQueue,
+  saveSnapshot,
+  type PendingOp,
+  type Snapshot,
+} from '../lib/offline'
+
+export interface OfflineData {
+  /** Cache plus everything not yet synced. This is what the UI renders. */
+  view: Snapshot
+  online: boolean
+  pending: number
+  /** True before the first successful fetch of this session. */
+  cold: boolean
+  error: string | null
+  setError: (e: string | null) => void
+  enqueue: (op: PendingOp) => void
+  refresh: () => Promise<void>
+}
+
+/**
+ * Server is truth, local is cache.
+ *
+ * The cached snapshot renders immediately — offline, or on a cold start over a
+ * slow connection — and queued operations are layered on top so a write shows
+ * up the instant it is made. The queue is pushed whenever the network looks
+ * available, and the snapshot is replaced by whatever the server says
+ * afterwards.
+ */
+export function useOfflineData(
+  today: string | null,
+  rangeStart: Date | null,
+  rangeEnd: Date | null,
+): OfflineData {
+  const [snapshot, setSnapshot] = useState<Snapshot>(loadSnapshot)
+  const [queue, setQueue] = useState<PendingOp[]>(loadQueue)
+  // the authoritative queue, so appending never depends on a React state
+  // updater having run yet — flush reads storage, not state
+  const queueRef = useRef<PendingOp[]>(queue)
+  const [online, setOnline] = useState(
+    typeof navigator === 'undefined' ? true : navigator.onLine,
+  )
+  const [cold, setCold] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const busy = useRef(false)
+  const rerun = useRef(false)
+
+  const view = useMemo(() => applyOps(snapshot, queue), [snapshot, queue])
+
+  // primitives, so the dependency arrays below stay statically checkable and a
+  // new Date object with the same instant does not retrigger every fetch
+  const startMs = rangeStart?.getTime() ?? null
+  const endMs = rangeEnd?.getTime() ?? null
+
+  const once = useCallback(async () => {
+    if (!today || startMs === null || endMs === null) return
+    try {
+      // push before pulling, so the server state we cache already contains
+      // our own pending writes rather than reverting them on screen
+      const result = await flush()
+      queueRef.current = loadQueue()
+      setQueue(queueRef.current)
+      if (result.rejected.length > 0) {
+        setError(
+          `${result.rejected.length} change(s) were refused and dropped: ` +
+            result.rejected.map((r) => r.message).join('; '),
+        )
+      } else if (result.stallReason) {
+        // a stalled queue looks identical to a working one; say so
+        setError(`Sync paused — ${result.stallReason}`)
+      }
+
+      const fresh = await fetchSnapshot(today, new Date(startMs), new Date(endMs))
+      setSnapshot(fresh)
+      saveSnapshot(fresh)
+      setCold(false)
+      setOnline(true)
+      if (result.rejected.length === 0 && !result.stallReason) setError(null)
+    } catch (e) {
+      // a failed fetch while offline is expected; keep showing the cache
+      if (typeof navigator !== 'undefined' && !navigator.onLine) setOnline(false)
+      else setError(e instanceof Error ? e.message : String(e))
+    }
+  }, [today, startMs, endMs])
+
+
+  const refresh = useCallback(async () => {
+    if (!today || startMs === null || endMs === null) return
+    if (busy.current) {
+      // Coalesce rather than drop. A fetch made while offline can hang for
+      // seconds, and the reconnect signal is exactly the request most likely to
+      // arrive during it — dropping that one leaves the queue stalled forever.
+      rerun.current = true
+      return
+    }
+    busy.current = true
+    try {
+      do {
+        rerun.current = false
+        await once()
+      } while (rerun.current)
+    } finally {
+      busy.current = false
+    }
+  }, [once, today, startMs, endMs])
+
+  const enqueue = useCallback(
+    (op: PendingOp) => {
+      // durable BEFORE the UI updates, and outside the React updater: a state
+      // updater is render-phase, double-invoked under StrictMode, and may not
+      // have run by the time flush reads storage
+      const next = [...queueRef.current, op]
+      queueRef.current = next
+      saveQueue(next)
+      setQueue(next)
+      void refresh()
+    },
+    [refresh],
+  )
+
+  useEffect(() => {
+    // the external-system synchronisation the rule exists to allow: fetch the
+    // server's version of what the cache is already showing
+    // oxlint-disable-next-line react/set-state-in-effect
+    void refresh()
+  }, [refresh])
+
+  useEffect(() => {
+    const goOnline = () => {
+      setOnline(true)
+      void refresh()
+    }
+    const goOffline = () => setOnline(false)
+    const onWake = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+    document.addEventListener('visibilitychange', onWake)
+    window.addEventListener('focus', onWake)
+
+    // Realtime is the fast path; the listeners above are the correctness path.
+    const channel = supabase
+      .channel('attention-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () =>
+        void refresh(),
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'time_entries' },
+        () => void refresh(),
+      )
+      .subscribe()
+
+    return () => {
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+      document.removeEventListener('visibilitychange', onWake)
+      window.removeEventListener('focus', onWake)
+      supabase.removeChannel(channel)
+    }
+  }, [refresh])
+
+  return {
+    view,
+    online,
+    pending: queue.length,
+    cold,
+    error,
+    setError,
+    enqueue,
+    refresh,
+  }
+}

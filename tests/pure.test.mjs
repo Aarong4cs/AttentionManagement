@@ -193,4 +193,99 @@ check('an empty list always lands at 0', () => {
   assert.equal(insertionIndex([], 500), 0)
 })
 
+
+
+import { applyOps, buildBlocks, emptySnapshot } from '../src/lib/offline.ts'
+
+const task = (id, over = {}) => ({
+  id, user_id: 'u', title: id, notes: null, due_at: null, estimated_minutes: null,
+  rank: id, completed_at: null, deleted_at: null, recurrence_id: null,
+  occurrence_date: null, detached: false, scheduled_end: null,
+  created_at: '2026-06-10T00:00:00Z', updated_at: '2026-06-10T00:00:00Z', ...over,
+})
+const snap = (over = {}) => ({ ...emptySnapshot, ...over })
+
+console.log('\noffline queue')
+check('createTask appears immediately', () => {
+  const s = applyOps(snap(), [{ op: 'createTask', at: 'x', task: task('a') }])
+  assert.deepEqual(s.tasks.map(t => t.id), ['a'])
+})
+check('moveTask updates the rank in place', () => {
+  const s = applyOps(snap({ tasks: [task('a'), task('b')] }),
+                     [{ op: 'moveTask', at: 'x', taskId: 'a', rank: 'zz' }])
+  assert.equal(s.tasks.find(t => t.id === 'a').rank, 'zz')
+})
+check('deleteTask removes the row from the view', () => {
+  const s = applyOps(snap({ tasks: [task('a'), task('b')] }),
+                     [{ op: 'deleteTask', at: '2026-06-10T01:00:00Z', taskId: 'a' }])
+  assert.deepEqual(s.tasks.map(t => t.id), ['b'])
+})
+check('startTrail makes the task appear to be running at once', () => {
+  const s = applyOps(snap({ tasks: [task('a')] }), [
+    { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' },
+  ])
+  assert.equal(s.running.id, 'e1')
+  assert.equal(s.entries.length, 1)
+  assert.equal(s.entries[0].ended_at, null)
+  assert.equal(s.entries[0].title, 'a', 'title is carried so the block can be drawn offline')
+})
+check('stopTrail closes it and clears the running slot', () => {
+  const s = applyOps(snap({ tasks: [task('a')] }), [
+    { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' },
+    { op: 'stopTrail', at: 'x', entryId: 'e1', endedAt: '2026-06-10T10:00:00Z' },
+  ])
+  assert.equal(s.running, null)
+  assert.equal(s.entries[0].ended_at, '2026-06-10T10:00:00Z')
+})
+check('completing mirrors the auto-stop trigger, at completed_at not now', () => {
+  const s = applyOps(snap({ tasks: [task('a')] }), [
+    { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' },
+    { op: 'completeTask', at: 'x', taskId: 'a', completedAt: '2026-06-10T09:45:00Z' },
+  ])
+  assert.equal(s.running, null, 'the timer must not still look like it is running')
+  assert.equal(s.entries[0].ended_at, '2026-06-10T09:45:00Z')
+})
+check('uncompleting does not reopen the closed entry', () => {
+  const s = applyOps(snap({ tasks: [task('a')] }), [
+    { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' },
+    { op: 'completeTask', at: 'x', taskId: 'a', completedAt: '2026-06-10T09:45:00Z' },
+    { op: 'uncompleteTask', at: 'x', taskId: 'a' },
+  ])
+  assert.equal(s.entries[0].ended_at, '2026-06-10T09:45:00Z')
+  assert.equal(s.running, null)
+  assert.equal(s.tasks[0].completed_at, null)
+})
+check('clearCompleted removes exactly the listed rows', () => {
+  const s = applyOps(
+    snap({ tasks: [task('a', { completed_at: 'x' }), task('b')] }),
+    [{ op: 'clearCompleted', at: '2026-06-10T01:00:00Z', taskIds: ['a'] }])
+  assert.deepEqual(s.tasks.map(t => t.id), ['b'])
+})
+check('ops apply in order and compose', () => {
+  const s = applyOps(snap(), [
+    { op: 'createTask', at: 'x', task: task('a') },
+    { op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' },
+    { op: 'moveTask', at: 'x', taskId: 'a', rank: 'q' },
+  ])
+  assert.equal(s.tasks[0].rank, 'q')
+  assert.equal(s.running.task_id, 'a')
+})
+check('applyOps does not mutate the snapshot it was given', () => {
+  const before = snap({ tasks: [task('a')] })
+  applyOps(before, [{ op: 'deleteTask', at: 'x', taskId: 'a' }])
+  assert.equal(before.tasks.length, 1, 'the cached snapshot must survive intact')
+})
+check('buildBlocks derives both kinds from rows', () => {
+  const s = applyOps(snap({
+    rangeTasks: [task('s', { due_at: '2026-06-10T13:00:00Z', estimated_minutes: 30,
+                             scheduled_end: '2026-06-10T13:30:00Z' })],
+    tasks: [task('a')],
+  }), [{ op: 'startTrail', at: 'x', entryId: 'e1', taskId: 'a', startedAt: '2026-06-10T09:00:00Z' }])
+  const blocks = buildBlocks(s)
+  assert.equal(blocks.filter(b => b.kind === 'scheduled').length, 1)
+  const trailed = blocks.find(b => b.kind === 'trailed')
+  assert.equal(trailed.running, true)
+  assert.equal(trailed.end, null)
+})
+
 console.log(`\n${n} assertions passed\n`)

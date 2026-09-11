@@ -661,3 +661,20 @@ input[type='number'] {
   padding: 0;
   list-style: none;
 }
+
+/* sync state ----------------------------------------------------------- */
+
+.syncbar {
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  border: 1px solid var(--warn-line);
+  background: var(--warn-bg);
+}
+
+.syncbar.syncing {
+  border-color: var(--line);
+  background: var(--field);
+  color: var(--muted);
+}

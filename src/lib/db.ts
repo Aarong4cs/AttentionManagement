@@ -12,6 +12,7 @@ import { clippedMs } from './time'
 import { MAX_ESTIMATE_MINUTES, STALE_TIMER_HOURS } from './constants'
 import type { Rank } from './rank'
 import type { Block, DateOnly, Profile, Task, TimeEntry, Uuid } from './types'
+import { buildBlocks, emptySnapshot, type EntryRow, type Snapshot } from './offline'
 
 type Rank_ = Rank
 export const newId = (): Uuid => crypto.randomUUID()
@@ -55,10 +56,23 @@ export async function startTrail(
   taskId: Uuid,
   startedAt: Date = new Date(),
 ): Promise<TimeEntry> {
+  return startTrailAt(newId(), taskId, startedAt)
+}
+
+/**
+ * Start a trail with a caller-supplied id and start instant. Offline replay
+ * needs both: the id so the local cache could already reference the row, and
+ * the instant so a timer started an hour ago offline does not land as "now".
+ */
+export async function startTrailAt(
+  id: Uuid,
+  taskId: Uuid,
+  startedAt: Date,
+): Promise<TimeEntry> {
   const { data, error } = await supabase
     .from('time_entries')
     .insert({
-      id: newId(),
+      id,
       task_id: taskId,
       started_at: startedAt.toISOString(),
       ended_at: null,
@@ -139,7 +153,10 @@ export async function reconcileRunningCollision(
  * Two round trips for a whole week, not fourteen: the caller buckets into day
  * columns and clips each block to the column it is drawn in.
  */
-export async function blocksInRange(start: Date, end: Date): Promise<Block[]> {
+export async function fetchRangeRows(
+  start: Date,
+  end: Date,
+): Promise<{ rangeTasks: Task[]; entries: EntryRow[] }> {
   const startIso = start.toISOString()
   const endIso = end.toISOString()
 
@@ -150,11 +167,6 @@ export async function blocksInRange(start: Date, end: Date): Promise<Block[]> {
     start.getTime() - MAX_ESTIMATE_MINUTES * 60_000,
   ).toISOString()
 
-  // Deleting a task erases its scheduled blocks from EVERY day, including past
-  // ones — a deletion means it should not have been there. Completion does not:
-  // a completed task keeps its block and is drawn struck through. Its trailed
-  // blocks survive either way (the entry query below does not filter on
-  // tasks.deleted_at), because those are a record of what actually happened.
   const scheduled = supabase
     .from('tasks')
     .select('*')
@@ -184,40 +196,49 @@ export async function blocksInRange(start: Date, end: Date): Promise<Block[]> {
   if (s.error) throw s.error
   if (t.error) throw t.error
 
-  const blocks: Block[] = []
+  type Joined = TimeEntry & { tasks: { title: string; completed_at: string | null } }
+  const entries: EntryRow[] = (t.data as unknown as Joined[]).map((e) => {
+    const { tasks, ...row } = e
+    // denormalised here so a trailed block can still be drawn from cache,
+    // where there is no join to re-run
+    return { ...row, title: tasks.title, taskCompleted: tasks.completed_at !== null }
+  })
 
-  for (const task of s.data as Task[]) {
-    blocks.push({
-      kind: 'scheduled',
-      id: task.id,
-      taskId: task.id,
-      title: task.title,
-      start: new Date(task.due_at!),
-      end: new Date(task.scheduled_end!),
-      running: false,
-      completed: task.completed_at !== null,
-      edited: false,
-    })
-  }
+  return { rangeTasks: s.data as Task[], entries }
+}
 
-  type JoinedEntry = TimeEntry & {
-    tasks: { title: string; completed_at: string | null }
-  }
-  for (const entry of t.data as unknown as JoinedEntry[]) {
-    blocks.push({
-      kind: 'trailed',
-      id: entry.id,
-      taskId: entry.task_id,
-      title: entry.tasks.title,
-      start: new Date(entry.started_at),
-      end: entry.ended_at ? new Date(entry.ended_at) : null,
-      running: entry.ended_at === null,
-      completed: entry.tasks.completed_at !== null,
-      edited: entry.edited_at !== null,
-    })
-  }
+/**
+ * Every block intersecting [start, end). Day view is the one-column case of
+ * week view — same query, narrower range.
+ *
+ * Two round trips for a whole week, not fourteen: the caller buckets into day
+ * columns and clips each block to the column it is drawn in.
+ */
+export async function blocksInRange(start: Date, end: Date): Promise<Block[]> {
+  const rows = await fetchRangeRows(start, end)
+  return buildBlocks({ ...emptySnapshot, ...rows })
+}
 
-  return blocks
+/** Everything the panes need, in one pass, for caching as a unit. */
+export async function fetchSnapshot(
+  today: DateOnly,
+  start: Date,
+  end: Date,
+): Promise<Snapshot> {
+  const [profile, tasks, rows, running] = await Promise.all([
+    getProfile(),
+    getSequence(today),
+    fetchRangeRows(start, end),
+    getRunningEntry(),
+  ])
+  return {
+    profile,
+    tasks,
+    rangeTasks: rows.rangeTasks,
+    entries: rows.entries,
+    running,
+    fetchedAt: new Date().toISOString(),
+  }
 }
 
 /** Blocks overlapping one day column, for rendering. */
@@ -259,15 +280,22 @@ export async function getSequence(today?: DateOnly): Promise<Task[]> {
 // mutations
 // ---------------------------------------------------------------------------
 
-/** A move is one row. That is the whole point of fractional ranking. */
+/**
+ * A move is one row. That is the whole point of fractional ranking.
+ *
+ * `exact` replays an already-decided rank: the key was computed from the
+ * neighbours the device could see at the time, and recomputing it now against a
+ * changed list would move the task somewhere the user never asked for.
+ */
 export async function moveTask(
   taskId: Uuid,
   before: Rank_ | null,
   after: Rank_ | null,
+  exact?: Rank_,
 ): Promise<Task> {
   const { data, error } = await supabase
     .from('tasks')
-    .update({ rank: rankBetween(before, after) })
+    .update({ rank: exact ?? rankBetween(before, after) })
     .eq('id', taskId)
     .select()
     .single()
@@ -364,6 +392,25 @@ export async function uncompleteTask(taskId: Uuid): Promise<Task> {
 /** The signed-in user's profile. Its timezone defines where every day begins. */
 export async function getProfile(): Promise<Profile> {
   const { data, error } = await supabase.from('profiles').select('*').single()
+  if (error) throw error
+  return data
+}
+
+/** Insert an already-built task row, for offline replay. */
+export async function createTaskRow(task: Task): Promise<Task> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({
+      id: task.id,
+      title: task.title,
+      notes: task.notes,
+      due_at: task.due_at,
+      estimated_minutes: task.estimated_minutes,
+      rank: task.rank,
+      completed_at: task.completed_at,
+    })
+    .select()
+    .single()
   if (error) throw error
   return data
 }

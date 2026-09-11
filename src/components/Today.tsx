@@ -1,27 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNow } from '../hooks/useNow'
-import {
-  UNIQUE_VIOLATION,
-  blocksInRange,
-  clearCompleted,
-  completeTask,
-  createTask,
-  elapsedMs,
-  getProfile,
-  getRunningEntry,
-  getSequence,
-  isStale,
-  moveTask,
-  startTrail,
-  stopTrail,
-  uncompleteTask,
-} from '../lib/db'
+import { useOfflineData } from '../hooks/useOfflineData'
+import { elapsedMs, getProfile, isStale, newId } from '../lib/db'
+import { buildBlocks, clearLocal } from '../lib/offline'
+import { rankAppend, rankBetween } from '../lib/rank'
+import { materializeAll } from '../lib/recurrence'
 import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
 import { addDays, startOfWeek, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
-import type { Block, Task, TimeEntry } from '../lib/types'
+import type { Task } from '../lib/types'
 import Timeline, { type TimelineDay } from './Timeline'
-import { materializeAll } from '../lib/recurrence'
 import Sequence from './Sequence'
 import Recurrences from './Recurrences'
 
@@ -36,11 +24,7 @@ function hhmmss(ms: number): string {
 export default function Today({ email }: { email: string }) {
   const [tz, setTz] = useState<string | null>(null)
   const [day, setDay] = useState<string | null>(null)
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [blocks, setBlocks] = useState<Block[]>([])
-  const [running, setRunning] = useState<TimeEntry | null>(null)
   const [title, setTitle] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
   const [view, setView] = useState<'day' | 'week'>('day')
   const [showRules, setShowRules] = useState(false)
@@ -55,11 +39,21 @@ export default function Today({ email }: { email: string }) {
         // materialization idempotent, from either device, concurrently
         return materializeAll()
       })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .catch(() => {
+        // offline on a cold start: fall back to the cached profile if there is
+        // one, and to the device zone if there is not
+        const cached = JSON.parse(
+          localStorage.getItem('am.snapshot.v1') ?? 'null',
+        ) as { profile?: { timezone?: string } } | null
+        const zone =
+          cached?.profile?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+        setTz(zone)
+        setDay(todayIn(zone))
+      })
   }, [])
 
-  // One source of truth for which days are on screen: the query range and the
-  // columns are derived from the same list, so they cannot disagree.
+  // One source of truth for what is on screen: the query range and the columns
+  // derive from the same list, so they cannot disagree.
   const dayKeys = useMemo(() => {
     if (!day) return []
     if (view === 'day') return [day]
@@ -67,108 +61,72 @@ export default function Today({ email }: { email: string }) {
     return Array.from({ length: 7 }, (_, i) => addDays(first, i))
   }, [day, view])
 
-  const load = useCallback(async () => {
-    if (!tz || !day || dayKeys.length === 0) return
-    try {
-      const [seq, run, bs] = await Promise.all([
-        getSequence(todayIn(tz)),
-        getRunningEntry(),
-        // the whole week in ONE query, bucketed into columns client-side
-        blocksInRange(
-          zonedDayStart(dayKeys[0], tz),
-          zonedDayEnd(dayKeys[dayKeys.length - 1], tz),
-        ),
-      ])
-      setTasks(seq)
-      setRunning(run)
-      setBlocks(bs)
-      setError(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }, [tz, day, dayKeys])
+  const rangeStart = tz && dayKeys.length ? zonedDayStart(dayKeys[0], tz) : null
+  const rangeEnd =
+    tz && dayKeys.length ? zonedDayEnd(dayKeys[dayKeys.length - 1], tz) : null
 
-  useEffect(() => {
-    // This is the external-system synchronisation the rule exists to allow:
-    // an initial fetch plus a realtime subscription to the same source.
-    // oxlint-disable-next-line react/set-state-in-effect
-    load()
-    const channel = supabase
-      .channel('attention-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'time_entries' }, load)
-      .subscribe()
-
-    const onWake = () => {
-      if (document.visibilityState === 'visible') load()
-    }
-    document.addEventListener('visibilitychange', onWake)
-    window.addEventListener('focus', onWake)
-    return () => {
-      supabase.removeChannel(channel)
-      document.removeEventListener('visibilitychange', onWake)
-      window.removeEventListener('focus', onWake)
-    }
-  }, [load])
-
-  async function toggle(task: Task) {
-    const wasRunning = running
-    setRunning(
-      wasRunning?.task_id === task.id
-        ? null
-        : ({
-            id: 'optimistic',
-            task_id: task.id,
-            started_at: new Date().toISOString(),
-            ended_at: null,
-          } as TimeEntry),
-    )
-    try {
-      if (wasRunning?.task_id === task.id) {
-        await stopTrail(wasRunning.id)
-      } else {
-        if (wasRunning) await stopTrail(wasRunning.id)
-        await startTrail(task.id)
-      }
-    } catch (e) {
-      const code = (e as { code?: string })?.code
-      setError(
-        code === UNIQUE_VIOLATION
-          ? 'Another device already has a timer running. Reloaded.'
-          : e instanceof Error
-            ? e.message
-            : String(e),
-      )
-    }
-    await load()
-  }
-
-  async function guard(fn: () => Promise<unknown>) {
-    try {
-      await fn()
-      await load()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
+  const data = useOfflineData(tz ? todayIn(tz) : null, rangeStart, rangeEnd)
+  const { view: snap, enqueue } = data
+  const blocks = useMemo(() => buildBlocks(snap), [snap])
 
   function onAdd(e: FormEvent) {
     e.preventDefault()
     const t = title.trim()
     if (!t) return
     setTitle('')
-    guard(() => createTask(t))
+    const task: Task = {
+      id: newId(),
+      user_id: snap.profile?.id ?? '',
+      title: t,
+      notes: null,
+      due_at: null,
+      estimated_minutes: null,
+      rank: rankAppend(snap.tasks.map((x) => x.rank)),
+      completed_at: null,
+      deleted_at: null,
+      recurrence_id: null,
+      occurrence_date: null,
+      detached: false,
+      scheduled_end: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+    enqueue({ op: 'createTask', at: new Date().toISOString(), task })
   }
 
-  if (!tz || !day) {
-    return <p className="muted center">{error ?? 'Loading…'}</p>
+  function toggle(task: Task) {
+    const at = new Date().toISOString()
+    const running = snap.running
+    if (running?.task_id === task.id) {
+      enqueue({ op: 'stopTrail', at, entryId: running.id, endedAt: at })
+      return
+    }
+    if (running) enqueue({ op: 'stopTrail', at, entryId: running.id, endedAt: at })
+    enqueue({
+      op: 'startTrail',
+      at,
+      entryId: newId(),
+      taskId: task.id,
+      startedAt: at,
+    })
   }
+
+  function onComplete(task: Task) {
+    const at = new Date().toISOString()
+    enqueue(
+      task.completed_at
+        ? { op: 'uncompleteTask', at, taskId: task.id }
+        : { op: 'completeTask', at, taskId: task.id, completedAt: at },
+    )
+  }
+
+  if (!tz || !day) return <p className="muted center">Loading…</p>
 
   const today = todayIn(tz)
-  const runningTask = running ? tasks.find((t) => t.id === running.task_id) : null
+  const runningTask = snap.running
+    ? snap.tasks.find((t) => t.id === snap.running!.task_id)
+    : null
 
-  // formatted from each day's own noon-UTC instant, which lands on the right
-  // calendar date in every zone
   const fmt = (key: string, opts: Intl.DateTimeFormatOptions) =>
     new Date(`${key}T12:00:00Z`).toLocaleDateString([], { ...opts, timeZone: 'UTC' })
 
@@ -176,8 +134,6 @@ export default function Today({ email }: { email: string }) {
     key,
     start: zonedDayStart(key, tz),
     end: zonedDayEnd(key, tz),
-    // composed rather than one format call: some locales render the combined
-    // form as "7 Mon", which reads wrong in a column header
     label: `${fmt(key, { weekday: 'short' })} ${fmt(key, { day: 'numeric' })}`,
     isToday: key === today,
   }))
@@ -211,7 +167,7 @@ export default function Today({ email }: { email: string }) {
             ›
           </button>
           {!showsToday && (
-            <button className="link" onClick={() => setDay(todayIn(tz))}>
+            <button className="link" onClick={() => setDay(today)}>
               today
             </button>
           )}
@@ -225,47 +181,57 @@ export default function Today({ email }: { email: string }) {
             Week
           </button>
         </div>
+
         <div className="bar-right">
           <button className="link" onClick={() => setShowRules(true)}>
             repeating
           </button>
-          <button className="link" onClick={() => supabase.auth.signOut()}>
+          <button
+            className="link"
+            onClick={() => {
+              clearLocal()
+              void supabase.auth.signOut()
+            }}
+          >
             {email} · sign out
           </button>
         </div>
       </header>
 
-      {running && (
+      {(!data.online || data.pending > 0) && (
+        <p className={data.online ? 'syncbar syncing' : 'syncbar offline'}>
+          {data.online
+            ? `Syncing ${data.pending} change${data.pending === 1 ? '' : 's'}…`
+            : data.pending > 0
+              ? `Offline · ${data.pending} change${
+                  data.pending === 1 ? '' : 's'
+                } saved here, will sync`
+              : 'Offline · showing the last saved view'}
+        </p>
+      )}
+
+      {snap.running && (
         <section className="running">
           <span className="dot" aria-hidden="true" />
           <span className="what">{runningTask?.title ?? 'Running'}</span>
-          <span className="clock">{hhmmss(elapsedMs(running, now))}</span>
-          <button
-            className="stop"
-            onClick={() => runningTask && toggle(runningTask)}
-          >
+          <span className="clock">{hhmmss(elapsedMs(snap.running, now))}</span>
+          <button className="stop" onClick={() => runningTask && toggle(runningTask)}>
             Stop
           </button>
         </section>
       )}
 
-      {running && isStale(running, now) && (
+      {snap.running && isStale(snap.running, now) && (
         <p className="warn">
           Running over {STALE_TIMER_HOURS} hours — did you forget to stop it?
         </p>
       )}
 
       <nav className="tabs">
-        <button
-          className={tab === 'timeline' ? 'on' : ''}
-          onClick={() => setTab('timeline')}
-        >
+        <button className={tab === 'timeline' ? 'on' : ''} onClick={() => setTab('timeline')}>
           Timeline
         </button>
-        <button
-          className={tab === 'sequence' ? 'on' : ''}
-          onClick={() => setTab('sequence')}
-        >
+        <button className={tab === 'sequence' ? 'on' : ''} onClick={() => setTab('sequence')}>
           Sequence
         </button>
       </nav>
@@ -276,24 +242,35 @@ export default function Today({ email }: { email: string }) {
         </section>
 
         <Sequence
-          tasks={tasks}
-          runningTaskId={running?.task_id ?? null}
+          tasks={snap.tasks}
+          runningTaskId={snap.running?.task_id ?? null}
           title={title}
           onTitleChange={setTitle}
           onAdd={onAdd}
           onToggle={toggle}
-          onComplete={(t) =>
-            guard(() => (t.completed_at ? uncompleteTask(t.id) : completeTask(t.id)))
+          onComplete={onComplete}
+          onClearCompleted={() =>
+            enqueue({
+              op: 'clearCompleted',
+              at: new Date().toISOString(),
+              taskIds: snap.tasks.filter((t) => t.completed_at).map((t) => t.id),
+            })
           }
-          onClearCompleted={() => guard(() => clearCompleted())}
-          onMove={(id, before, after) => guard(() => moveTask(id, before, after))}
+          onMove={(id, before, after) =>
+            enqueue({
+              op: 'moveTask',
+              at: new Date().toISOString(),
+              taskId: id,
+              rank: rankBetween(before, after),
+            })
+          }
         />
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {data.error && <p className="error">{data.error}</p>}
 
       {showRules && (
-        <Recurrences tz={tz} onClose={() => setShowRules(false)} onChanged={load} />
+        <Recurrences tz={tz} onClose={() => setShowRules(false)} onChanged={data.refresh} />
       )}
     </div>
   )
