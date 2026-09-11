@@ -109,3 +109,37 @@ export function clippedMs(
   const hi = Math.min(end.getTime(), winEnd.getTime())
   return Math.max(0, hi - lo)
 }
+
+/**
+ * A block's time range, in the profile's timezone.
+ *
+ * Collapses a shared meridiem ("9:00–9:30 AM" rather than "9:00 AM–9:30 AM")
+ * because a week column is about 5rem wide and the repetition costs more than
+ * it explains. Locales that format 24-hour produce no meridiem at all, so the
+ * parts are read rather than assumed.
+ */
+export function formatRange(
+  start: Date,
+  end: Date | null,
+  tz: string,
+  locale?: string,
+): string {
+  const at = (d: Date) => {
+    const parts = new Intl.DateTimeFormat(locale ? [locale] : [], {
+      timeZone: tz,
+      hour: 'numeric',
+      minute: '2-digit',
+    }).formatToParts(d)
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+    return { time: `${get('hour')}:${get('minute')}`, period: get('dayPeriod') }
+  }
+
+  const a = at(start)
+  const suffix = (p: string) => (p ? ` ${p}` : '')
+  if (!end) return `${a.time}${suffix(a.period)}–now`
+
+  const b = at(end)
+  return a.period === b.period
+    ? `${a.time}–${b.time}${suffix(b.period)}`
+    : `${a.time}${suffix(a.period)}–${b.time}${suffix(b.period)}`
+}

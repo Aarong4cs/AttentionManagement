@@ -405,6 +405,33 @@ input[type='checkbox'] {
   text-align: left;
 }
 
+/*
+ * Children must not shrink. As flex items they otherwise compress to fit a
+ * short block, and the title — the one with overflow:hidden — collapses to zero
+ * height while the time survives, which is precisely backwards. Now the block
+ * clips from the bottom and the name is always the part that stays.
+ */
+.block > * {
+  flex: none;
+  max-width: 100%;
+}
+
+/* too short for two lines: put the name and the range on one */
+.block.is-short {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.block.is-short .block-title {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* a week column has no room for both on one line; the name wins */
+.dense .block.is-short .block-time,
+.block.is-narrow .block-time {
+  display: none;
+}
+
 /* planned: outlined and recessive. observed: filled and solid. */
 .block.scheduled {
   background: var(--sched-bg);
@@ -445,12 +472,11 @@ input[type='checkbox'] {
   font-size: 0.6875rem;
   opacity: 0.75;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* in a week, a column is ~5rem wide: the title is worth more than the time */
-.dense .block-time {
-  display: none;
-}
 .dense .block {
   padding: 0.1rem 0.25rem;
   font-size: 0.6875rem;

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { layoutDay, nowOffset } from '../lib/layout'
+import { formatRange } from '../lib/time'
 import type { Block } from '../lib/types'
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
@@ -18,6 +19,12 @@ function hourLabel(h: number): string {
 function clock(d: Date, tz: string): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: tz })
 }
+
+/**
+ * Below this, a block is not tall enough for two lines of text and switches to
+ * a single row. 24 minutes is about 25px on a 24-hour column.
+ */
+const TWO_LINE_MINUTES = 24
 
 export interface TimelineDay {
   key: string
@@ -102,12 +109,17 @@ export default function Timeline({
 
                 {positioned.map(({ block, top, height, lane, lanes }) => {
                   const width = 100 / lanes
+                  const range = formatRange(block.start, block.end, tz)
                   return (
                     <div
                       key={`${block.kind}-${block.id}`}
                       className={[
                         'block',
                         block.kind,
+                        height * 24 * 60 < TWO_LINE_MINUTES ? 'is-short' : '',
+                        // a lane inside a week column is ~40px: showing "10:…"
+                        // beside "see…" helps nobody, so the name takes it all
+                        days.length > 1 && lanes > 1 ? 'is-narrow' : '',
                         block.running ? 'is-running' : '',
                         block.completed ? 'is-done' : '',
                         block.edited ? 'is-edited' : '',
@@ -120,13 +132,13 @@ export default function Timeline({
                         left: `${lane * width}%`,
                         width: `${width}%`,
                       }}
-                      title={`${block.title} — ${clock(block.start, tz)}${
-                        block.end ? `–${clock(block.end, tz)}` : ' (running)'
+                      title={`${block.title} — ${range}${
+                        block.edited ? ' (edited)' : ''
                       }`}
                     >
                       <span className="block-title">{block.title}</span>
                       <span className="block-time">
-                        {clock(block.start, tz)}
+                        {range}
                         {block.edited && ' · edited'}
                       </span>
                     </div>

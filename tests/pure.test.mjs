@@ -288,4 +288,48 @@ check('buildBlocks derives both kinds from rows', () => {
   assert.equal(trailed.end, null)
 })
 
+
+
+import { formatRange } from '../src/lib/time.ts'
+
+console.log('\nblock time ranges')
+const TZNY = 'America/New_York'
+check('collapses a shared meridiem', () => {
+  assert.equal(
+    formatRange(D('2026-06-10T13:00:00Z'), D('2026-06-10T13:30:00Z'), TZNY, 'en-US'),
+    '9:00–9:30 AM')
+})
+check('keeps both when they differ', () => {
+  assert.equal(
+    formatRange(D('2026-06-10T15:30:00Z'), D('2026-06-10T17:00:00Z'), TZNY, 'en-US'),
+    '11:30 AM–1:00 PM')
+})
+check('a running block reads as ending now', () => {
+  assert.equal(
+    formatRange(D('2026-06-10T13:00:00Z'), null, TZNY, 'en-US'),
+    '9:00 AM–now')
+})
+check('spans midnight without wrapping to a date', () => {
+  assert.equal(
+    formatRange(D('2026-06-11T03:40:00Z'), D('2026-06-11T04:20:00Z'), TZNY, 'en-US'),
+    '11:40 PM–12:20 AM')
+})
+check('a 24-hour locale renders the afternoon as 24-hour', () => {
+  // 17:00Z is 1pm in New York
+  assert.equal(
+    formatRange(D('2026-06-10T17:00:00Z'), D('2026-06-10T17:30:00Z'), TZNY, 'en-GB'),
+    '13:00–13:30')
+  assert.equal(
+    formatRange(D('2026-06-10T17:00:00Z'), D('2026-06-10T17:30:00Z'), TZNY, 'en-US'),
+    '1:00–1:30 PM')
+})
+check('morning and evening never render identically', () => {
+  // a 12-hour clock without a meridiem would make 9am and 9pm the same string
+  for (const loc of ['en-US', 'en-GB']) {
+    const morning = formatRange(D('2026-06-10T13:00:00Z'), null, TZNY, loc) // 9am NY
+    const evening = formatRange(D('2026-06-11T01:00:00Z'), null, TZNY, loc) // 9pm NY
+    assert.notEqual(morning, evening, `${loc}: ${morning} vs ${evening}`)
+  }
+})
+
 console.log(`\n${n} assertions passed\n`)
