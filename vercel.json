@@ -47,7 +47,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|assets/|src/|node_modules/|@)[^.]*)",
       "destination": "/index.html"
     }
   ]
