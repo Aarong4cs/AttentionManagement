@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -110,6 +111,25 @@ export default function Timeline({
     end: Date
   } | null>(null)
   const [editing, setEditing] = useState(false)
+  /*
+   * The draft's name and colour live out here, not in the sheet.
+   *
+   * They decide whether the draft is worth keeping: an untouched one is just a
+   * rectangle you put down and walked away from, and a press elsewhere throws
+   * it away. Once it has a name or a colour it is work, and only Discard
+   * removes it. Keeping them here also means closing the sheet does not lose
+   * what was typed into it.
+   */
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftColor, setDraftColor] = useState<string | null>(null)
+  const touched = draftTitle.trim() !== '' || draftColor !== null
+
+  const clearDraft = useCallback(() => {
+    setDraft(null)
+    setEditing(false)
+    setDraftTitle('')
+    setDraftColor(null)
+  }, [])
   const hold = useLongPress((x, y) => {
     // a hold is not a drag: drop whatever the pointer had picked up
     setGrab(null)
@@ -132,6 +152,9 @@ export default function Timeline({
     if (block && (!onReschedule || block.running)) return
     e.preventDefault()
     e.stopPropagation()
+    // one thing in hand at a time: reaching for a real block abandons a draft
+    // nobody has bothered to name
+    if (block && draft && !touched) clearDraft()
     const column = (e.currentTarget as HTMLElement).closest('.tl-col')
     if (!column) return
     const height = column.getBoundingClientRect().height
@@ -152,13 +175,30 @@ export default function Timeline({
   useEffect(() => {
     if (!draft) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      setEditing(false)
-      setDraft(null)
+      if (e.key === 'Escape') clearDraft()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [draft])
+  }, [draft, clearDraft])
+
+  /*
+   * A press anywhere outside the timeline puts an unnamed draft away.
+   *
+   * Only an unnamed one: the point of placing first and naming second is that
+   * a block costs nothing until you commit to it, and that only holds if
+   * walking away is free. Once it has a name or a colour, walking away would
+   * throw work out, so it stays until Discard.
+   */
+  useEffect(() => {
+    if (!draft || touched) return
+    const onDown = (e: PointerEvent) => {
+      const el = e.target as HTMLElement | null
+      if (el?.closest('.timeline-pane, .sheet-backdrop, .menu')) return
+      clearDraft()
+    }
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [draft, touched, clearDraft])
 
   const todayCol = days.find((d) => d.isToday)
   const marker = todayCol ? nowOffset(todayCol.start, todayCol.end, now) : null
@@ -347,6 +387,8 @@ export default function Timeline({
                     d.start.getTime() + ((e.clientY - r.top) / r.height) * span,
                     NEW_BLOCK_SNAP_MINUTES,
                   )
+                  // a second tap repositions the one draft rather than
+                  // opening another; whatever it has been given comes with it
                   setDraft({
                     day: d,
                     start: new Date(at),
@@ -400,7 +442,6 @@ export default function Timeline({
                       onPointerDown={(e) => {
                         hold.onPointerDown(e)
                         holdTarget.current = block
-                        if (canDrag) beginDrag(e, block, 'move', d)
                       }}
                       onPointerMove={hold.onPointerMove}
                       onPointerUp={hold.onPointerUp}
@@ -421,6 +462,21 @@ export default function Timeline({
 
                       {canDrag && (
                         <>
+                          {/*
+                            Moving has its own handle. The body used to start
+                            the move, but the resize strips are 10px at each
+                            edge and a 30-minute block is barely 30px tall —
+                            so on exactly the blocks that need it most, aiming
+                            for "move" hit "resize" instead.
+                          */}
+                          <span
+                            className="block-grip"
+                            role="button"
+                            aria-label={`Move ${block.title}`}
+                            onPointerDown={(e) => beginDrag(e, block, 'move', d)}
+                          >
+                            ⠿
+                          </span>
                           <span
                             className="grab-edge top"
                             onPointerDown={(e) => beginDrag(e, block, 'start', d)}
@@ -463,18 +519,32 @@ export default function Timeline({
                   const height = (live.end.getTime() - live.start.getTime()) / span
                   return (
                     <div
-                      className="block draft-block is-draggable"
+                      className={
+                        touched
+                          ? 'block draft-block is-draggable is-named'
+                          : 'block draft-block is-draggable'
+                      }
+                      data-color={draftColor ?? undefined}
                       style={{
                         top: `${top * 100}%`,
                         height: `${height * 100}%`,
                         left: 0,
                         width: '100%',
                       }}
-                      onPointerDown={(e) => beginDrag(e, null, 'move', d, live)}
                     >
-                      <span className="block-title">New block</span>
+                      <span className="block-title">
+                        {draftTitle.trim() || 'New block'}
+                      </span>
                       <span className="block-time">
                         {formatRange(live.start, live.end, tz)}
+                      </span>
+                      <span
+                        className="block-grip"
+                        role="button"
+                        aria-label="Move the new block"
+                        onPointerDown={(e) => beginDrag(e, null, 'move', d, live)}
+                      >
+                        ⠿
                       </span>
                       <span
                         className="grab-edge top"
@@ -509,11 +579,11 @@ export default function Timeline({
         <span className="draft-range">
           {formatRange(draft.start, draft.end, tz)}
         </span>
-        <button className="discard" onClick={() => setDraft(null)}>
+        <button className="discard" onClick={clearDraft}>
           Discard
         </button>
         <button className="accent" onClick={() => setEditing(true)}>
-          Name it…
+          {touched ? 'Edit…' : 'Name it…'}
         </button>
       </div>
     )}
@@ -521,11 +591,14 @@ export default function Timeline({
     {draft && editing && (
       <NewBlock
         range={formatRange(draft.start, draft.end, tz)}
+        title={draftTitle}
+        color={draftColor}
+        onTitleChange={setDraftTitle}
+        onColorChange={setDraftColor}
         onCancel={() => setEditing(false)}
-        onSave={(title, color) => {
-          onCreate?.(draft.start, draft.end, title, color)
-          setEditing(false)
-          setDraft(null)
+        onSave={() => {
+          onCreate?.(draft.start, draft.end, draftTitle.trim(), draftColor)
+          clearDraft()
         }}
       />
     )}

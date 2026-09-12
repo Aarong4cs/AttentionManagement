@@ -819,6 +819,48 @@ input[type='number'] {
   bottom: -2px;
 }
 
+/*
+ * The move handle.
+ *
+ * Centred vertically, because the resize strips own 10px at each edge and a
+ * 30-minute block is only about 30px tall — the middle is the one band that is
+ * unambiguously "move". Above the strips in the stack so it wins the hit test
+ * where they do overlap on the shortest blocks.
+ */
+.block-grip {
+  position: absolute;
+  right: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1.15rem;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.22);
+  color: inherit;
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.75;
+  cursor: grab;
+  /* or a vertical drag scrolls the timeline instead of moving the block */
+  touch-action: none;
+}
+.block-grip:active {
+  cursor: grabbing;
+  opacity: 1;
+}
+/* keep the text clear of it */
+.block.is-draggable .block-title,
+.block.is-draggable .block-time {
+  padding-right: 1.15rem;
+}
+.block.is-short.is-draggable .block-time {
+  padding-right: 1.15rem;
+}
+
 .block:hover .grab-edge::after,
 .block.is-grabbed .grab-edge::after {
   content: '';
@@ -1066,6 +1108,11 @@ input[type='number'] {
 .draft-block .block-title {
   color: var(--muted);
   font-style: italic;
+}
+/* named: it is no longer a placeholder, so it stops looking like one */
+.draft-block.is-named .block-title {
+  color: inherit;
+  font-style: normal;
 }
 /* the resize edges are always live here: there is nothing else to grab for */
 .draft-block .grab-edge::after {

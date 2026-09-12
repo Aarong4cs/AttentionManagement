@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { TASK_COLORS } from '../lib/constants'
 
 /**
@@ -11,15 +10,22 @@ import { TASK_COLORS } from '../lib/constants'
  */
 export default function NewBlock({
   range,
+  title,
+  color,
+  onTitleChange,
+  onColorChange,
   onCancel,
   onSave,
 }: {
   range: string
+  /* held by the timeline, so closing this does not discard what is in it */
+  title: string
+  color: string | null
+  onTitleChange: (v: string) => void
+  onColorChange: (v: string | null) => void
   onCancel: () => void
-  onSave: (title: string, color: string | null) => void
+  onSave: () => void
 }) {
-  const [title, setTitle] = useState('')
-  const [color, setColor] = useState<string | null>(null)
   const name = title.trim()
 
   return (
@@ -30,7 +36,7 @@ export default function NewBlock({
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault()
-          if (name) onSave(name, color)
+          if (name) onSave()
         }}
       >
         <header className="sheet-head">
@@ -47,7 +53,7 @@ export default function NewBlock({
           autoFocus
           value={title}
           placeholder="What is it?"
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => onTitleChange(e.target.value)}
         />
 
         <div className="setting">
@@ -57,7 +63,7 @@ export default function NewBlock({
               type="button"
               className={`swatch default${color === null ? ' on' : ''}`}
               aria-label="Default colour"
-              onClick={() => setColor(null)}
+              onClick={() => onColorChange(null)}
             />
             {TASK_COLORS.map((c) => (
               <button
@@ -66,7 +72,7 @@ export default function NewBlock({
                 className={`swatch${color === c ? ' on' : ''}`}
                 data-color={c}
                 aria-label={c}
-                onClick={() => setColor(c)}
+                onClick={() => onColorChange(c)}
               />
             ))}
           </div>
