@@ -1,6 +1,12 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { dragBlock, layoutDay, nowOffset, snap } from '../lib/layout'
-import { formatRange } from '../lib/time'
+import { formatRange, timeOfDay } from '../lib/time'
 import { useLongPress } from '../hooks/useLongPress'
 import NewBlock from './NewBlock'
 import type { Block } from '../lib/types'
@@ -19,7 +25,7 @@ function hourLabel(h: number): string {
  * that contradicts the gridline it sits on.
  */
 function clock(d: Date, tz: string): string {
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: tz })
+  return timeOfDay(d, tz)
 }
 
 /**
@@ -158,6 +164,38 @@ export default function Timeline({
   const marker = todayCol ? nowOffset(todayCol.start, todayCol.end, now) : null
 
   /*
+   * A coarser clock, for layout only.
+   *
+   * `now` ticks every second because the elapsed-time readout needs it. Layout
+   * does not: a day column is 96rem tall, so a running block grows about a
+   * hundredth of a pixel per second. Re-clipping and re-laning every block in
+   * the week sixty times a minute produced no visible change at all. Twice a
+   * minute is still under one pixel of drift.
+   */
+  const layoutNow = useMemo(
+    () => new Date(Math.floor(now.getTime() / 30_000) * 30_000),
+    [now],
+  )
+
+  // one substitution for the whole grid, rather than one per column
+  const shown = useMemo(
+    () =>
+      grab?.block && preview
+        ? blocks.map((b) =>
+            b.kind === grab.block!.kind && b.id === grab.block!.id
+              ? { ...b, start: preview.start, end: preview.end }
+              : b,
+          )
+        : blocks,
+    [blocks, grab, preview],
+  )
+
+  const byDay = useMemo(
+    () => days.map((d) => layoutDay(shown, d.start, d.end, layoutNow)),
+    [days, shown, layoutNow],
+  )
+
+  /*
    * Where the draft is right now, which mid-drag is not where it is stored.
    * `draft.day` only catches up on release, so gating the render on it drew
    * the block in the column it came FROM, at an offset measured against that
@@ -292,17 +330,10 @@ export default function Timeline({
             )}
           </div>
 
-          {days.map((d) => {
-            // while dragging, lay out against the previewed times so the block
-            // follows the pointer instead of snapping back on release
-            const shown = grab?.block && preview
-              ? blocks.map((b) =>
-                  b.kind === grab.block!.kind && b.id === grab.block!.id
-                    ? { ...b, start: preview.start, end: preview.end }
-                    : b,
-                )
-              : blocks
-            const positioned = layoutDay(shown, d.start, d.end, now)
+          {days.map((d, dayIndex) => {
+            // while dragging, laid out against the previewed times so the
+            // block follows the pointer instead of snapping back on release
+            const positioned = byDay[dayIndex]
             return (
               <div
                 key={d.key}
@@ -481,7 +512,7 @@ export default function Timeline({
         <button className="discard" onClick={() => setDraft(null)}>
           Discard
         </button>
-        <button className="keep" onClick={() => setEditing(true)}>
+        <button className="accent" onClick={() => setEditing(true)}>
           Name it…
         </button>
       </div>

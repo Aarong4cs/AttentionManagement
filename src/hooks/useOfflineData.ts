@@ -152,6 +152,16 @@ export function useOfflineData(
     }
   }, [today, startMs, endMs])
 
+  /*
+   * The newest fetch, for the coalescing loop below to re-run.
+   *
+   * Declared before the effect that calls refresh, so it is already current by
+   * the time a range change triggers one.
+   */
+  const onceRef = useRef(once)
+  useEffect(() => {
+    onceRef.current = once
+  }, [once])
 
   const refresh = useCallback(async () => {
     if (!today || startMs === null || endMs === null) return
@@ -166,12 +176,20 @@ export function useOfflineData(
     try {
       do {
         rerun.current = false
-        await once()
+        /*
+         * onceRef, not once. A coalesced request is usually a DIFFERENT
+         * request — switching to the week view while a day-view fetch is in
+         * flight is the common one — and re-running the captured closure
+         * refetched the range already on screen instead. The new range was
+         * then never asked for at all, so the week stayed empty until some
+         * later navigation happened to find the hook idle.
+         */
+        await onceRef.current()
       } while (rerun.current)
     } finally {
       busy.current = false
     }
-  }, [once, today, startMs, endMs])
+  }, [today, startMs, endMs])
 
   const enqueue = useCallback(
     (op: PendingOp) => {

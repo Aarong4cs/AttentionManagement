@@ -522,10 +522,19 @@ input[type='checkbox'] {
   font-size: 0.8125rem;
   white-space: nowrap;
 }
+/* filled with the accent: the affirmative half of a choice, and the one
+   control in a row that is worth reaching for */
+.accent,
 .viewswitch button.on {
   background: var(--trail);
   color: var(--trail-fg);
   border-color: transparent;
+}
+/* the default hover greys the border, which reads as a dent in a filled one */
+.accent:hover:not(:disabled),
+.draft-bar .discard:hover:not(:disabled) {
+  border-color: transparent;
+  filter: brightness(1.12);
 }
 
 .running .stop {
@@ -1106,16 +1115,6 @@ input[type='number'] {
 .draft-bar .discard {
   background: var(--err-solid);
   color: var(--err-solid-fg);
-}
-.draft-bar .keep {
-  background: var(--trail);
-  color: var(--trail-fg);
-}
-.draft-bar button:hover:not(:disabled) {
-  /* the default hover greys the border, which reads as a dent in a filled
-     button */
-  border-color: transparent;
-  filter: brightness(1.12);
 }
 
 /* rename in place ------------------------------------------------------ */

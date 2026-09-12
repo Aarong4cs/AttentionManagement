@@ -8,9 +8,31 @@
 
 import type { DateOnly } from './types'
 
+/**
+ * Shared, reused `Intl.DateTimeFormat` instances.
+ *
+ * Constructing one is expensive and formatting with it is not — about 70x, so
+ * a week of 79 blocks was spending 16ms per render building 158 formatters it
+ * then threw away. That ran once a second, because the clock ticks.
+ */
+const formatters = new Map<string, Intl.DateTimeFormat>()
+
+function formatter(
+  locale: string | string[],
+  opts: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${String(locale)}|${JSON.stringify(opts)}`
+  let f = formatters.get(key)
+  if (!f) {
+    f = new Intl.DateTimeFormat(locale, opts)
+    formatters.set(key, f)
+  }
+  return f
+}
+
 /** Offset (ms) between UTC and `tz` at the given instant. */
 function tzOffsetMs(at: Date, tz: string): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
+  const dtf = formatter('en-US', {
     timeZone: tz,
     hour12: false,
     year: 'numeric',
@@ -86,7 +108,7 @@ export function startOfWeek(day: DateOnly, weekStartsOn: number): DateOnly {
 
 /** Today's calendar date in `tz`. */
 export function todayIn(tz: string): DateOnly {
-  return new Intl.DateTimeFormat('en-CA', {
+  return formatter('en-CA', {
     timeZone: tz,
     year: 'numeric',
     month: '2-digit',
@@ -125,7 +147,7 @@ export function formatRange(
   locale?: string,
 ): string {
   const at = (d: Date) => {
-    const parts = new Intl.DateTimeFormat(locale ? [locale] : [], {
+    const parts = formatter(locale ? [locale] : [], {
       timeZone: tz,
       hour: 'numeric',
       minute: '2-digit',
@@ -142,4 +164,9 @@ export function formatRange(
   return a.period === b.period
     ? `${a.time}–${b.time}${suffix(b.period)}`
     : `${a.time}${suffix(a.period)}–${b.time}${suffix(b.period)}`
+}
+
+/** A wall clock reading in `tz`, from a reused formatter. */
+export function timeOfDay(at: Date, tz: string): string {
+  return formatter([], { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(at)
 }

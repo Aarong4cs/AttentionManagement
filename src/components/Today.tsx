@@ -288,8 +288,8 @@ export default function Today({ email }: { email: string }) {
             ›
           </button>
           {!showsToday && (
-            <button className="link" onClick={() => setDay(today)}>
-              today
+            <button className="accent" onClick={() => setDay(today)}>
+              Today
             </button>
           )}
         </div>
