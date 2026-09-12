@@ -1081,6 +1081,32 @@ input[type='number'] {
   color: var(--muted);
 }
 
+/* the two are one either/or choice, so they match rather than ranking
+   themselves by however long their labels happen to be */
+.draft-bar button {
+  flex: none;
+  min-width: 6.5rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8125rem;
+  border-color: transparent;
+  white-space: nowrap;
+}
+.draft-bar .discard {
+  background: var(--err-solid);
+  color: var(--err-solid-fg);
+}
+.draft-bar .keep {
+  background: var(--trail);
+  color: var(--trail-fg);
+}
+.draft-bar button:hover:not(:disabled) {
+  /* the default hover greys the border, which reads as a dent in a filled
+     button */
+  border-color: transparent;
+  filter: brightness(1.12);
+}
+
 /* rename in place ------------------------------------------------------ */
 
 /* the title is a button so it is focusable and reachable by keyboard, but it

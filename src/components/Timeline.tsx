@@ -466,10 +466,12 @@ export default function Timeline({
         <span className="draft-range">
           {formatRange(draft.start, draft.end, tz)}
         </span>
-        <button className="chip" onClick={() => setDraft(null)}>
+        <button className="discard" onClick={() => setDraft(null)}>
           Discard
         </button>
-        <button onClick={() => setEditing(true)}>Name it…</button>
+        <button className="keep" onClick={() => setEditing(true)}>
+          Name it…
+        </button>
       </div>
     )}
 

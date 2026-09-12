@@ -6,6 +6,10 @@
   --line: #e2e2dd;
   --ok: #1f7a4d;
   --err: #a32b1c;
+  /* --err is tuned to be read as text on the page; a button filled with it
+     needs its own value so the label on top stays legible. */
+  --err-solid: #a32b1c;
+  --err-solid-fg: #fff5f3;
   --field: #ffffff;
   --trail: #1f5f4f;
   --trail-fg: #f2fbf7;
@@ -59,6 +63,10 @@
     --line: #2e2e33;
     --ok: #57c48a;
     --err: #e2705f;
+    /* the dark --err is a light salmon: white on it is 2.9:1, so the filled
+       variant goes the other way and darkens instead */
+    --err-solid: #b8452f;
+    --err-solid-fg: #fff5f3;
     --field: #1e1e23;
     --trail: #2f7d68;
     --trail-fg: #f2fbf7;
@@ -98,6 +106,10 @@
     --line: #2e2e33;
     --ok: #57c48a;
     --err: #e2705f;
+    /* the dark --err is a light salmon: white on it is 2.9:1, so the filled
+       variant goes the other way and darkens instead */
+    --err-solid: #b8452f;
+    --err-solid-fg: #fff5f3;
     --field: #1e1e23;
     --trail: #2f7d68;
     --trail-fg: #f2fbf7;
