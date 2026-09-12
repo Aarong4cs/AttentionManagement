@@ -157,6 +157,18 @@ export default function Timeline({
   const todayCol = days.find((d) => d.isToday)
   const marker = todayCol ? nowOffset(todayCol.start, todayCol.end, now) : null
 
+  /*
+   * Where the draft is right now, which mid-drag is not where it is stored.
+   * `draft.day` only catches up on release, so gating the render on it drew
+   * the block in the column it came FROM, at an offset measured against that
+   * column — off the end of it, and so invisible, until the pointer came up.
+   */
+  const draftLive = draft && grab && !grab.block && preview ? preview : draft
+  const draftDay = draftLive
+    ? (days.find((x) => draftLive.start >= x.start && draftLive.start < x.end) ??
+       draft?.day)
+    : null
+
   // bring the current time into view once, rather than fighting the user's
   // scrolling on every tick
   useEffect(() => {
@@ -412,10 +424,10 @@ export default function Timeline({
                   )
                 })}
 
-                {draft && draft.day.key === d.key && (() => {
+                {draft && draftLive && draftDay?.key === d.key && (() => {
                   const span = d.end.getTime() - d.start.getTime()
                   // mid-gesture the preview leads, exactly as a block's does
-                  const live = grab && !grab.block && preview ? preview : draft
+                  const live = draftLive
                   const top = (live.start.getTime() - d.start.getTime()) / span
                   const height = (live.end.getTime() - live.start.getTime()) / span
                   return (
