@@ -1499,13 +1499,26 @@ button.step-title {
 }
 .preset-grid {
   display: grid;
-  /* as many columns as fit, each at least wide enough for "Commuting" */
-  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  /*
+   * As many columns as fit, each wide enough for "🚗 Commuting" on one line.
+   * 6.5rem fitted the word alone, but with its emoji beside it the three-column
+   * phone layout pushed "Commuting" onto a second line. 8rem gives two columns
+   * on a phone and in the desktop pane; min() keeps a single column from ever
+   * being wider than the pane itself.
+   */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8rem), 1fr));
   gap: 0.5rem;
 }
 .preset-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   padding: 0.5rem 0.6rem;
   font-size: 0.9375rem;
+}
+.preset-label {
+  min-width: 0;
   overflow-wrap: break-word;
 }
 /* the one running is lit, the way a running sequence row's Stop is */
@@ -1539,6 +1552,16 @@ button.step-title {
   flex: 1;
   min-width: 0;
   overflow-wrap: break-word;
+}
+/* the emoji sits left of the name, in the grid and in the Settings list */
+.preset-emoji {
+  flex: none;
+  margin-right: 0.35rem;
+  font-size: 1.05em;
+  line-height: 1;
+}
+.preset-button .preset-emoji {
+  margin-right: 0;
 }
 /* and the add field beneath it stretches to match, rather than stopping short */
 .setting > form.add {

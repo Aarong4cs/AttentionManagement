@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { clearLocal } from '../lib/offline'
 import { syncNow } from '../lib/gcalClient'
 import { useTheme, type Theme } from '../hooks/useTheme'
+import { DEFAULT_PRESETS, presetEmoji } from '../lib/presets'
 import type { Preset } from '../lib/types'
 
 const THEMES: { id: Theme; label: string }[] = [
@@ -11,8 +12,8 @@ const THEMES: { id: Theme; label: string }[] = [
   { id: 'dark', label: 'Dark' },
 ]
 
-/** Offered when the list is empty — the examples the feature was asked for with. */
-const SUGGESTED = ['Resting', 'Leisure', 'Eating', 'Commuting']
+/** Offered when the list is empty. */
+const SUGGESTED = DEFAULT_PRESETS.map((p) => p.title)
 
 export default function Settings({
   email,
@@ -158,7 +159,14 @@ export default function Settings({
             <ul className="preset-list">
               {presets.map((p) => (
                 <li key={p.id}>
-                  <span className="preset-title">{p.title}</span>
+                  <span className="preset-title">
+                    {presetEmoji(p.title) && (
+                      <span className="preset-emoji" aria-hidden="true">
+                        {presetEmoji(p.title)}
+                      </span>
+                    )}
+                    {p.title}
+                  </span>
                   <button
                     className="step-delete"
                     aria-label={`Remove ${p.title}`}

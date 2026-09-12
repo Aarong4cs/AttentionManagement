@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import { applyOps, emptySnapshot, type PendingOp, type Snapshot } from '../src/lib/offline'
 import type { Preset, Profile, Task } from '../src/lib/types'
+import { DEFAULT_PRESETS, presetEmoji } from '../src/lib/presets'
 
 const at = '2026-09-12T10:00:00.000Z'
 const profile = {
@@ -84,5 +85,20 @@ describe('preset ops', () => {
     } as Task
     const s = applyOps(base, [{ op: 'createTask', at, task }])
     expect(s.tasks.find((t) => t.id === 'pt')?.title).toBe('Eating')
+  })
+})
+
+describe('default preset emoji', () => {
+  it('labels each default preset with its own emoji', () => {
+    for (const p of DEFAULT_PRESETS) expect(presetEmoji(p.title)).toBe(p.emoji)
+    expect(new Set(DEFAULT_PRESETS.map((p) => p.emoji)).size).toBe(DEFAULT_PRESETS.length)
+  })
+
+  it('matches by name however it was typed', () => {
+    expect(presetEmoji('  eating ')).toBe(presetEmoji('Eating'))
+  })
+
+  it('gives a preset of your own no emoji', () => {
+    expect(presetEmoji('Stretching')).toBeNull()
   })
 })

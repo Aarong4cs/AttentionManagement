@@ -1,3 +1,4 @@
+import { presetEmoji } from '../lib/presets'
 import type { Preset } from '../lib/types'
 
 /**
@@ -25,6 +26,7 @@ export default function PresetGrid({
         <div className="preset-grid">
           {presets.map((p) => {
             const on = runningPresetId === p.id
+            const emoji = presetEmoji(p.title)
             return (
               <button
                 key={p.id}
@@ -32,7 +34,13 @@ export default function PresetGrid({
                 aria-pressed={on}
                 onClick={() => onPress(p)}
               >
-                {p.title}
+                {/* decoration: the button's name is the preset's, not the emoji's */}
+                {emoji && (
+                  <span className="preset-emoji" aria-hidden="true">
+                    {emoji}
+                  </span>
+                )}
+                <span className="preset-label">{p.title}</span>
               </button>
             )
           })}
