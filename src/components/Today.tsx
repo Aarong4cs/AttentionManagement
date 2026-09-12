@@ -394,18 +394,6 @@ export default function Today({ email }: { email: string }) {
               taskId: id,
               rank: rankBetween(before?.rank ?? null, after?.rank ?? null),
             })
-            /*
-             * The list is grouped by priority, so a drop between two groups has
-             * to mean something. Adopt the row above's tag — or the row below's
-             * when dropped at the very top — otherwise dragging a P3 above a P1
-             * writes a rank that the sort immediately overrides, and the task
-             * springs back as if the drag never happened.
-             */
-            const target = before ? before.priority : after ? after.priority : null
-            const moved = snap.tasks.find((t) => t.id === id)
-            if (moved && moved.priority !== target) {
-              enqueue({ op: 'setPriority', at, taskId: id, priority: target })
-            }
           }}
         />
       </div>

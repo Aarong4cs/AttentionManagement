@@ -324,9 +324,7 @@ export async function getSequence(today?: DateOnly): Promise<Task[]> {
     query = query.or(`recurrence_id.is.null,occurrence_date.eq.${today}`)
   }
   const { data, error } = await query
-    // tagged tasks first, highest priority at the top; the manual rank still
-    // decides order within a priority, so tagging groups without discarding it
-    .order('priority', { ascending: true, nullsFirst: false })
+    // the manual order, and only that — see the sort in applyOps
     .order('rank')
     .order('id')
   if (error) throw error

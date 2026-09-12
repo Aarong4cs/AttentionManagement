@@ -247,13 +247,18 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
     }
   }
 
-  // mirror the server's ordering, so a task tagged offline jumps to its group
-  // immediately instead of waiting for the next fetch
+  /*
+   * Rank alone, and deliberately so. Sorting by priority first made rank a
+   * tiebreaker inside a group, and a drag can only ever write a rank — so
+   * dropping across a group boundary asked rankBetween for a key between two
+   * neighbours whose ranks were in no particular order. It does not reject
+   * that: generateKeyBetween('a1', 'a0') returns 'a0V' rather than throwing,
+   * so the row landed somewhere unrelated to where it was dropped. Priority
+   * is a tag on a task, not a position in the list.
+   */
   s.tasks = alive(s.tasks).sort(
     (a, b) =>
-      (a.priority ?? Infinity) - (b.priority ?? Infinity) ||
-      (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) ||
-      (a.id < b.id ? -1 : 1),
+      (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) || (a.id < b.id ? -1 : 1),
   )
   s.rangeTasks = alive(s.rangeTasks)
   s.entries = alive(s.entries)

@@ -25,7 +25,6 @@ export default function Sequence({
   onToggle: (task: Task) => void
   onComplete: (task: Task) => void
   onClearCompleted: () => void
-  /** Neighbours, not just ranks: dropping into a group adopts its priority. */
   onMove: (taskId: Uuid, before: Task | null, after: Task | null) => void
   onMenu: (task: Task, x: number, y: number) => void
   onRename: (taskId: Uuid, title: string) => void
@@ -223,11 +222,6 @@ function RowGroup({
           onChange={() => onComplete(task)}
           aria-label={`Complete ${task.title}`}
         />
-        {task.notes && (
-          <span className="has-notes" aria-label="Has a description">
-            ≡
-          </span>
-        )}
         {task.priority !== null && (
           <span className="prio-tag" data-priority={task.priority}>
             P{task.priority}

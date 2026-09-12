@@ -311,6 +311,16 @@ input[type='checkbox'] {
 
 .tl {
   min-width: min-content;
+  /*
+   * Safari treats a tap here as text first and a gesture second: a
+   * double-tap zooms, and the long-press that opens the context menu
+   * selects the label underneath and raises the callout instead.
+   * Nothing in the grid is text anyone wants to select.
+   */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .tl-head,
@@ -690,9 +700,16 @@ input[type='number'] {
   cursor: grabbing;
 }
 
-.seq.is-dragging {
-  /* stop text selection turning the drag into a highlight */
+/* the row opens its menu on long-press, which otherwise selects the title */
+.seq li {
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+/* but a field inside a row is still a field */
+.seq li input {
+  user-select: auto;
+  -webkit-user-select: auto;
 }
 
 .seq li.is-dragged {
@@ -1034,7 +1051,10 @@ input[type='number'] {
   background: none;
   color: inherit;
   font: inherit;
-  font-size: 0.75rem;
+  /* Not 0.75rem, however well that matched a block label. Safari zooms the
+     whole page in when a focused field is under 16px, and this one is focused
+     the instant you tap the timeline. Same rule as the other text fields. */
+  font-size: max(1rem, 16px);
 }
 .draft input:focus {
   outline: none;
@@ -1082,6 +1102,8 @@ button.title:hover {
   background: var(--field);
   color: inherit;
   font: inherit;
+  /* as .draft input: under 16px Safari zooms the page on focus */
+  font-size: max(1rem, 16px);
 }
 
 /* mirrored calendar events --------------------------------------------- */
@@ -1167,13 +1189,6 @@ button.title:hover {
 }
 
 /* task descriptions ----------------------------------------------------- */
-
-.has-notes {
-  flex: none;
-  color: var(--muted);
-  font-size: 0.8rem;
-  line-height: 1;
-}
 
 /*
  * The description of whatever is being tracked. This is meant to be read while
