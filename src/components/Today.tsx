@@ -22,6 +22,7 @@ import TaskMenu, { type MenuTarget } from './TaskMenu'
 import GoogleCalendar from './GoogleCalendar'
 import Settings from './Settings'
 import Subtasks from './Subtasks'
+import PresetGrid from './PresetGrid'
 
 function hhmmss(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -245,7 +246,7 @@ export default function Today({ email }: { email: string }) {
   }
 
   /**
-   * Start a preset's timer. Each preset is backed by one task, made the first
+   * Start or stop a preset's timer. Each preset is backed by one task, made the first
    * time it runs and reused after that, so all of its time stays together. If
    * two devices each made one while offline, the oldest is the one reused.
    */
@@ -264,8 +265,7 @@ export default function Today({ email }: { email: string }) {
       })
       enqueue({ op: 'createTask', at, task })
     }
-    // picking the one already running leaves it running rather than stopping it
-    if (snap.running?.task_id === task.id) return
+    // the lit button stops it, exactly like Stop on a sequence row
     toggle(task)
   }
 
@@ -406,6 +406,15 @@ export default function Today({ email }: { email: string }) {
           onMenu={openTaskMenu}
           subtasks={snap.subtasks}
           onToggleSubtask={toggleSubtask}
+          presets={
+            snap.profile?.presets_enabled ? (
+              <PresetGrid
+                presets={snap.presets}
+                runningPresetId={runningTask?.preset_id ?? null}
+                onPress={startPreset}
+              />
+            ) : undefined
+          }
           running={
             snap.running ? (
               <>
@@ -462,9 +471,6 @@ export default function Today({ email }: { email: string }) {
             // steps show under the timer, and only a sequence task can run
             sequenceTasks.some((t) => t.id === menu.taskId) ? setStepsFor : undefined
           }
-          presets={snap.profile?.presets_enabled ? snap.presets : undefined}
-          runningPresetId={runningTask?.preset_id ?? null}
-          onStartPreset={startPreset}
           onDeleteTask={
             // deleting the whole task belongs to the sequence; the timeline
             // only ever removes a single record of time

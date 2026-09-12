@@ -74,6 +74,7 @@ export default function Sequence({
   running,
   subtasks,
   onToggleSubtask,
+  presets,
 }: {
   tasks: readonly Task[]
   runningTaskId: Uuid | null
@@ -90,6 +91,8 @@ export default function Sequence({
   running?: ReactNode
   subtasks: readonly Subtask[]
   onToggleSubtask: (step: Subtask) => void
+  /** The preset buttons, rendered here so they sit under the sequence. */
+  presets?: ReactNode
 }) {
   const rows = useRef(new Map<Uuid, HTMLLIElement>())
   const list = useRef<HTMLUListElement>(null)
@@ -284,6 +287,8 @@ export default function Sequence({
           Clear completed
         </button>
       )}
+
+      {presets}
     </section>
   )
 }

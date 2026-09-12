@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { TASK_COLORS } from '../lib/constants'
-import type { Preset } from '../lib/types'
 
 export interface MenuTarget {
   taskId: string
@@ -22,9 +21,6 @@ export default function TaskMenu({
   onRecolor,
   onPrioritise,
   onSubtasks,
-  presets,
-  runningPresetId,
-  onStartPreset,
   onDeleteTask,
   onDeleteEntry,
 }: {
@@ -35,13 +31,6 @@ export default function TaskMenu({
   onPrioritise: (taskId: string, priority: number | null) => void
   /** Only for a task in the sequence — that is where its steps show. */
   onSubtasks?: (taskId: string) => void
-  /**
-   * Present only when preset tasks are switched on in Settings. Picking one
-   * starts its timer — it has nothing to do with the task this menu is for.
-   */
-  presets?: readonly Preset[]
-  runningPresetId?: string | null
-  onStartPreset?: (preset: Preset) => void
   /** Omitted on the timeline: removing a whole task belongs to the sequence. */
   onDeleteTask?: (taskId: string) => void
   onDeleteEntry?: (entryId: string) => void
@@ -118,31 +107,6 @@ export default function TaskMenu({
               >
                 Subtasks…
               </button>
-            )}
-
-            {presets && onStartPreset && (
-              <div className="menu-presets" role="group" aria-label="Preset tasks">
-                <div className="menu-section">Preset tasks</div>
-                {presets.length === 0 ? (
-                  <span className="menu-note menu-empty">Add presets in Settings</span>
-                ) : (
-                  presets.map((p) => (
-                    <button
-                      key={p.id}
-                      role="menuitem"
-                      onClick={() => {
-                        onStartPreset(p)
-                        onClose()
-                      }}
-                    >
-                      {p.title}
-                      {runningPresetId === p.id && (
-                        <span className="preset-tracking">tracking</span>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
             )}
 
             <div className="menu-colors" role="group" aria-label="Colour">

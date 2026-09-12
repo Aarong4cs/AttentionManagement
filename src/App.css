@@ -1482,36 +1482,37 @@ button.step-title {
   color: var(--err);
 }
 
-/* preset tasks: in the task menu, and managed in Settings ---------------- */
+/* presets: a grid of buttons under the sequence, managed in Settings ----- */
 
-.menu-presets {
+.presets {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  margin-top: 0.1rem;
-  padding-top: 0.25rem;
-  border-top: 1px solid var(--line);
+  gap: 0.5rem;
 }
-.menu-section {
-  padding: 0.2rem 0.5rem;
+.presets h3 {
+  margin: 0;
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
 }
-.menu-presets button[role='menuitem'] {
-  display: flex;
-  align-items: center;
+.preset-grid {
+  display: grid;
+  /* as many columns as fit, each at least wide enough for "Commuting" */
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
   gap: 0.5rem;
 }
-.preset-tracking {
-  margin-left: auto;
-  font-size: 0.6875rem;
-  color: var(--trail-strong);
+.preset-button {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.9375rem;
+  overflow-wrap: break-word;
 }
-.menu-empty {
-  padding: 0.15rem 0.5rem 0.35rem;
+/* the one running is lit, the way a running sequence row's Stop is */
+.preset-button.on {
+  background: var(--trail);
+  color: var(--trail-fg);
+  border-color: transparent;
 }
 
 .preset-list {

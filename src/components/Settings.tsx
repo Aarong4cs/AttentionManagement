@@ -145,10 +145,11 @@ export default function Settings({
               onChange={(e) => onTogglePresets(e.target.checked)}
             />
             <span className="rule-text">
-              <span className="title">Show in the task menu</span>
+              <span className="title">Show under the sequence</span>
               <span className="muted">
-                Pick one to start its timer straight away. Its time goes on the
-                timeline; it never joins your sequence.
+                A button for each preset. Press one to start its timer, press it
+                again to stop. Its time goes on the timeline; it never joins your
+                sequence.
               </span>
             </span>
           </label>
