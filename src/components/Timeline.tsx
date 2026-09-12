@@ -120,6 +120,15 @@ export default function Timeline({
    * removes it. Keeping them here also means closing the sheet does not lose
    * what was typed into it.
    */
+  /*
+   * The block whose controls are up.
+   *
+   * Hover alone could not hold them: they hang below the block, so reaching
+   * for one means leaving the block, and they vanished on the way down. A
+   * click latches them instead, which is also the only thing that can work on
+   * a touch screen — there is no hover to reveal them with.
+   */
+  const [activeKey, setActiveKey] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftColor, setDraftColor] = useState<string | null>(null)
   const touched = draftTitle.trim() !== '' || draftColor !== null
@@ -175,7 +184,9 @@ export default function Timeline({
   useEffect(() => {
     if (!draft) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') clearDraft()
+      if (e.key !== 'Escape') return
+      setActiveKey(null)
+      clearDraft()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -190,11 +201,12 @@ export default function Timeline({
    * throw work out, so it stays until Discard.
    */
   useEffect(() => {
-    if (!draft || touched) return
     const onDown = (e: PointerEvent) => {
       const el = e.target as HTMLElement | null
-      if (el?.closest('.timeline-pane, .sheet-backdrop, .menu')) return
-      clearDraft()
+      // a sheet or a menu is a conversation about the thing, not a move away
+      if (el?.closest('.sheet-backdrop, .menu')) return
+      if (!el?.closest('.block-wrap')) setActiveKey(null)
+      if (draft && !touched && !el?.closest('.timeline-pane')) clearDraft()
     }
     window.addEventListener('pointerdown', onDown)
     return () => window.removeEventListener('pointerdown', onDown)
@@ -387,6 +399,7 @@ export default function Timeline({
                     d.start.getTime() + ((e.clientY - r.top) / r.height) * span,
                     NEW_BLOCK_SNAP_MINUTES,
                   )
+                  setActiveKey(null)
                   // a second tap repositions the one draft rather than
                   // opening another; whatever it has been given comes with it
                   setDraft({
@@ -424,9 +437,15 @@ export default function Timeline({
                         'block-wrap',
                         grab?.block?.id === block.id ? 'is-grabbed' : '',
                         busy ? 'is-muted' : '',
+                        !busy && activeKey === `${block.kind}-${block.id}`
+                          ? 'is-active'
+                          : '',
                       ]
                         .filter(Boolean)
                         .join(' ')}
+                      onClick={() =>
+                        setActiveKey(busy ? null : `${block.kind}-${block.id}`)
+                      }
                       style={{
                         top: `${top * 100}%`,
                         height: `${height * 100}%`,

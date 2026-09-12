@@ -317,6 +317,13 @@ input[type='checkbox'] {
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  /*
+   * Reserve the scrollbar's lane even when it is hidden. macOS shows an
+   * overlay scrollbar the moment you scroll, directly over the right edge of
+   * the last column — which is exactly where that column's controls sit, so
+   * they became unclickable while scrolling.
+   */
+  scrollbar-gutter: stable;
 }
 
 .tl {
@@ -421,7 +428,6 @@ input[type='checkbox'] {
 .block-wrap {
   position: absolute;
 }
-.block-wrap:hover,
 .block-wrap.is-grabbed,
 .block-wrap.is-drafting {
   z-index: 6;
@@ -835,7 +841,8 @@ input[type='number'] {
 /* dragging and deleting blocks ----------------------------------------- */
 
 .block.is-draggable {
-  cursor: grab;
+  /* the body selects; only the grip drags */
+  cursor: pointer;
   /* or a vertical drag scrolls the timeline instead of moving the block */
   touch-action: none;
 }
@@ -869,23 +876,48 @@ input[type='number'] {
  * unambiguously "move". Above the strips in the stack so it wins the hit test
  * where they do overlap on the shortest blocks.
  */
+/*
+ * scrollbar-gutter reserves nothing on macOS, where the scrollbar is an
+ * overlay with no layout width — it simply appears on top of the rightmost
+ * column while you scroll. So the last column's controls step in far enough
+ * to clear it.
+ */
+.tl-col:last-child .block-controls {
+  right: 1rem;
+}
+
 .block-controls {
   position: absolute;
-  /* just under the block's own bottom-right corner */
+  /* flush with the block's bottom edge, and padded rather than offset: a
+     margin here left a dead gap that dropped the hover on the way down to
+     the very buttons it was revealing */
   top: 100%;
-  right: 0;
-  margin-top: 2px;
+  right: 2px;
+  padding: 3px 0 3px 0.5rem;
   display: none;
   gap: 3px;
   /* the × sits to the left of the grip */
   flex-direction: row;
 }
-.block-wrap:hover .block-controls,
+/*
+ * Selected, not hovered.
+ *
+ * Hover cannot hold these. They hang below the block, so reaching one means
+ * leaving the block, and any approach that is not nearly vertical at the far
+ * right passes outside both boxes — hover drops, the cluster hides, and it is
+ * no longer there to catch the pointer. Measured: reaching diagonally lost
+ * them at four of ten steps. A click latches them instead, which is also the
+ * only thing that can work where there is no hover at all.
+ */
+.block-wrap.is-active .block-controls,
 .block-wrap:focus-within .block-controls,
 .block-wrap.is-grabbed .block-controls,
-/* touch has no hover, and a draft's handle must be there to be found */
+/* a draft's handle has to be there to be found */
 .block-wrap.is-drafting .block-controls {
   display: flex;
+}
+.block-wrap.is-active {
+  z-index: 7;
 }
 
 .block-controls > * {
@@ -936,17 +968,6 @@ input[type='number'] {
 }
 .grab-edge.bottom::after {
   bottom: 3px;
-}
-
-/*
- * Touch has no hover, so the cluster is permanent there rather than a control
- * you can never reach. It no longer has to hide on short blocks — being
- * outside the block is the whole point.
- */
-@media (hover: none) {
-  .block-wrap .block-controls {
-    display: flex;
-  }
 }
 
 /* task colours --------------------------------------------------------- */
