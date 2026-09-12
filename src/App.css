@@ -879,25 +879,33 @@ input[type='number'] {
 /*
  * scrollbar-gutter reserves nothing on macOS, where the scrollbar is an
  * overlay with no layout width — it simply appears on top of the rightmost
- * column while you scroll. So the last column's controls step in far enough
- * to clear it.
+ * column while you scroll. So the last column's grip steps in far enough to
+ * clear it. The × is at the other corner and never met it.
  */
-.tl-col:last-child .block-controls {
+.tl-col:last-child .block-controls.at-right {
   right: 1rem;
 }
 
+/*
+ * The two live in opposite corners under the block: delete on the left, move
+ * on the right. Side by side they were a pair of 20px targets 3px apart, and
+ * the one that destroys something sat next to the one you reach for most.
+ */
 .block-controls {
   position: absolute;
-  /* flush with the block's bottom edge, and padded rather than offset: a
-     margin here left a dead gap that dropped the hover on the way down to
-     the very buttons it was revealing */
   top: 100%;
-  right: 2px;
-  padding: 3px 0 3px 0.5rem;
+  padding-top: 3px;
   display: none;
   gap: 3px;
-  /* the × sits to the left of the grip */
   flex-direction: row;
+}
+.block-controls.at-left {
+  left: 2px;
+  padding-right: 0.5rem;
+}
+.block-controls.at-right {
+  right: 2px;
+  padding-left: 0.5rem;
 }
 /*
  * Selected, not hovered.

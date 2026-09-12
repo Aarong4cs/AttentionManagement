@@ -39,6 +39,9 @@ const TWO_LINE_MINUTES = 24
 const NEW_BLOCK_MINUTES = 30
 const NEW_BLOCK_SNAP_MINUTES = 15
 
+/** Matches the long-press slop, so a gesture is never read as both. */
+const DRAG_SLOP_PX = 8
+
 export interface TimelineDay {
   key: string
   start: Date
@@ -100,6 +103,27 @@ export default function Timeline({
   })
   const holdTarget = useRef<Block | null>(null)
   /*
+   * A press on a block that has not moved yet.
+   *
+   * Holding the body and moving is the second way to drag one, alongside the
+   * grip. It cannot simply start on pointerdown — that is also how you select
+   * a block and how the long-press menu begins — so the press is held here and
+   * only becomes a drag once the pointer has travelled far enough to mean it.
+   * The same 8px that cancels the long press promotes this, so the two can
+   * never both fire.
+   */
+  const pending = useRef<{
+    block: Block
+    day: TimelineDay
+    originY: number
+    originX: number
+    msPerPx: number
+    start: Date
+    end: Date
+  } | null>(null)
+  /** Set when a press turned into a drag, so the click after it is not a select. */
+  const dragged = useRef(false)
+  /*
    * An unsaved block. It exists only on screen: you place and size it first,
    * and nothing is written until the sheet is filled in and saved. Opening a
    * focused field the instant you touch the grid put a keyboard over the very
@@ -133,12 +157,14 @@ export default function Timeline({
   const [draftColor, setDraftColor] = useState<string | null>(null)
   const touched = draftTitle.trim() !== '' || draftColor !== null
 
+  // the setters are stable, but naming them keeps the compiler willing to
+  // optimise this component rather than bailing on the whole thing
   const clearDraft = useCallback(() => {
     setDraft(null)
     setEditing(false)
     setDraftTitle('')
     setDraftColor(null)
-  }, [])
+  }, [setDraft, setEditing, setDraftTitle, setDraftColor])
   const hold = useLongPress((x, y) => {
     // a hold is not a drag: drop whatever the pointer had picked up
     setGrab(null)
@@ -211,6 +237,50 @@ export default function Timeline({
     window.addEventListener('pointerdown', onDown)
     return () => window.removeEventListener('pointerdown', onDown)
   }, [draft, touched, clearDraft])
+
+  /** Remember a press on a block's body, in case it turns into a drag. */
+  function armDrag(
+    e: ReactPointerEvent<HTMLElement>,
+    block: Block,
+    day: TimelineDay,
+  ) {
+    const column = (e.currentTarget as HTMLElement).closest('.tl-col')
+    const height = column?.getBoundingClientRect().height ?? 0
+    if (height <= 0) return
+    pending.current = {
+      block,
+      day,
+      originY: e.clientY,
+      originX: e.clientX,
+      msPerPx: (day.end.getTime() - day.start.getTime()) / height,
+      start: block.start,
+      end: block.end ?? now,
+    }
+  }
+
+  /** Far enough from where the press began to be a drag rather than a tap. */
+  function maybeDrag(e: ReactPointerEvent<HTMLElement>) {
+    const p = pending.current
+    if (!p || grab) return
+    if (
+      Math.abs(e.clientY - p.originY) <= DRAG_SLOP_PX &&
+      Math.abs(e.clientX - p.originX) <= DRAG_SLOP_PX
+    ) {
+      return
+    }
+    pending.current = null
+    dragged.current = true
+    setGrab({
+      block: p.block,
+      mode: 'move',
+      originY: p.originY,
+      msPerPx: p.msPerPx,
+      originDay: p.day,
+      start: p.start,
+      end: p.end,
+    })
+    setPreview({ start: p.start, end: p.end })
+  }
 
   const todayCol = days.find((d) => d.isToday)
   const marker = todayCol ? nowOffset(todayCol.start, todayCol.end, now) : null
@@ -443,9 +513,14 @@ export default function Timeline({
                       ]
                         .filter(Boolean)
                         .join(' ')}
-                      onClick={() =>
+                      onClick={() => {
+                        // the click that ends a drag is not a selection
+                        if (dragged.current) {
+                          dragged.current = false
+                          return
+                        }
                         setActiveKey(busy ? null : `${block.kind}-${block.id}`)
-                      }
+                      }}
                       style={{
                         top: `${top * 100}%`,
                         height: `${height * 100}%`,
@@ -479,10 +554,20 @@ export default function Timeline({
                           if (busy) return
                           hold.onPointerDown(e)
                           holdTarget.current = block
+                          if (canDrag) armDrag(e, block, d)
                         }}
-                        onPointerMove={hold.onPointerMove}
-                        onPointerUp={hold.onPointerUp}
-                        onPointerCancel={hold.onPointerCancel}
+                        onPointerMove={(e) => {
+                          hold.onPointerMove(e)
+                          maybeDrag(e)
+                        }}
+                        onPointerUp={() => {
+                          hold.onPointerUp()
+                          pending.current = null
+                        }}
+                        onPointerCancel={() => {
+                          hold.onPointerCancel()
+                          pending.current = null
+                        }}
                       >
                         {readOnly && (
                           <span className="block-mark" aria-label="From Google Calendar">
@@ -518,31 +603,31 @@ export default function Timeline({
                         few pixels. Out here their room does not depend on how
                         long the block happens to be.
                       */}
-                      {(canDrag || canDelete) && (
-                        <div className="block-controls">
-                          {canDelete && (
-                            <button
-                              className="block-delete"
-                              aria-label={`Delete ${block.title}`}
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                onDelete?.(block)
-                              }}
-                            >
-                              ×
-                            </button>
-                          )}
-                          {canDrag && (
-                            <span
-                              className="block-grip"
-                              role="button"
-                              aria-label={`Move ${block.title}`}
-                              onPointerDown={(e) => beginDrag(e, block, 'move', d)}
-                            >
-                              ⠿
-                            </span>
-                          )}
+                      {canDelete && (
+                        <div className="block-controls at-left">
+                          <button
+                            className="block-delete"
+                            aria-label={`Delete ${block.title}`}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onDelete?.(block)
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )}
+                      {canDrag && (
+                        <div className="block-controls at-right">
+                          <span
+                            className="block-grip"
+                            role="button"
+                            aria-label={`Move ${block.title}`}
+                            onPointerDown={(e) => beginDrag(e, block, 'move', d)}
+                          >
+                            ⠿
+                          </span>
                         </div>
                       )}
                     </div>
@@ -588,7 +673,7 @@ export default function Timeline({
                           onPointerDown={(e) => beginDrag(e, null, 'end', d, live)}
                         />
                       </div>
-                      <div className="block-controls">
+                      <div className="block-controls at-right">
                         <span
                           className="block-grip"
                           role="button"
