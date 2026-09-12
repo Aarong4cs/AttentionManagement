@@ -457,6 +457,7 @@ export default function Today({ email }: { email: string }) {
           email={email}
           onClose={() => setShowSettings(false)}
           onOpenCalendar={() => setShowCalendar(true)}
+          onChanged={data.refresh}
         />
       )}
 

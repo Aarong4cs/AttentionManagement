@@ -163,31 +163,8 @@ export default function GoogleCalendar({
               </label>
             </div>
 
+            {/* Sync now lives in Settings, beside "Manage calendars…" */}
             <div className="row">
-              <button
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true)
-                  try {
-                    const r = await syncNow()
-                    const trouble = [
-                      ...(r.failures ?? []),
-                      r.push?.reconsent
-                        ? 'Reconnect to allow writing to Google.'
-                        : (r.push?.error ?? ''),
-                    ].filter(Boolean)
-                    if (trouble.length) setError(trouble.join('; '))
-                    await load()
-                    onChanged()
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : String(e))
-                  } finally {
-                    setBusy(false)
-                  }
-                }}
-              >
-                Sync now
-              </button>
               {/*
                 Re-granting scopes must not mean disconnecting: that would drop
                 every mirrored row and pull the whole calendar again. Connecting
