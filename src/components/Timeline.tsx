@@ -113,7 +113,7 @@ export default function Timeline({
    * never both fire.
    */
   const pending = useRef<{
-    block: Block
+    block: Block | null
     day: TimelineDay
     originY: number
     originX: number
@@ -241,8 +241,9 @@ export default function Timeline({
   /** Remember a press on a block's body, in case it turns into a drag. */
   function armDrag(
     e: ReactPointerEvent<HTMLElement>,
-    block: Block,
+    block: Block | null,
     day: TimelineDay,
+    range?: { start: Date; end: Date },
   ) {
     const column = (e.currentTarget as HTMLElement).closest('.tl-col')
     const height = column?.getBoundingClientRect().height ?? 0
@@ -253,8 +254,8 @@ export default function Timeline({
       originY: e.clientY,
       originX: e.clientX,
       msPerPx: (day.end.getTime() - day.start.getTime()) / height,
-      start: block.start,
-      end: block.end ?? now,
+      start: range?.start ?? block!.start,
+      end: range?.end ?? block!.end ?? now,
     }
   }
 
@@ -657,6 +658,14 @@ export default function Timeline({
                             : 'block draft-block is-draggable'
                         }
                         data-color={draftColor ?? undefined}
+                        onPointerDown={(e) => armDrag(e, null, d, live)}
+                        onPointerMove={maybeDrag}
+                        onPointerUp={() => {
+                          pending.current = null
+                        }}
+                        onPointerCancel={() => {
+                          pending.current = null
+                        }}
                       >
                         <span className="block-title">
                           {draftTitle.trim() || 'New block'}
@@ -672,6 +681,19 @@ export default function Timeline({
                           className="grab-edge bottom"
                           onPointerDown={(e) => beginDrag(e, null, 'end', d, live)}
                         />
+                      </div>
+                      <div className="block-controls at-left">
+                        <button
+                          className="block-delete"
+                          aria-label="Discard the new block"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            clearDraft()
+                          }}
+                        >
+                          ×
+                        </button>
                       </div>
                       <div className="block-controls at-right">
                         <span
