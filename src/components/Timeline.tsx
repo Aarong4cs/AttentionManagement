@@ -407,22 +407,23 @@ export default function Timeline({
                   // would be undone by the next sync, so none of it is offered
                   // — and it must not LOOK offered either.
                   const readOnly = block.source !== null
-                  const canDrag = Boolean(onReschedule) && !block.running && !readOnly
+                  /*
+                   * A draft takes the timeline over until it is put away. One
+                   * block is in play at a time, so the rest stop offering
+                   * anything and say so by dimming.
+                   */
+                  const busy = draft !== null
+                  const canDrag =
+                    Boolean(onReschedule) && !block.running && !readOnly && !busy
+                  const canDelete =
+                    Boolean(onDelete) && block.kind === 'trailed' && !readOnly && !busy
                   return (
                     <div
                       key={`${block.kind}-${block.id}`}
                       className={[
-                        'block',
-                        block.kind,
-                        height * 24 * 60 < TWO_LINE_MINUTES ? 'is-short' : '',
-                        // a lane inside a week column is ~40px: showing "10:…"
-                        // beside "see…" helps nobody, so the name takes it all
-                        days.length > 1 && lanes > 1 ? 'is-narrow' : '',
-                        block.running ? 'is-running' : '',
-                        block.completed ? 'is-done' : '',
-                        canDrag ? 'is-draggable' : '',
-                        readOnly ? 'is-external' : '',
+                        'block-wrap',
                         grab?.block?.id === block.id ? 'is-grabbed' : '',
+                        busy ? 'is-muted' : '',
                       ]
                         .filter(Boolean)
                         .join(' ')}
@@ -432,80 +433,98 @@ export default function Timeline({
                         left: `${lane * width}%`,
                         width: `${width}%`,
                       }}
-                      title={`${block.title} — ${range}`}
-                      data-color={block.color ?? undefined}
-                      onContextMenu={(e) => {
-                        if (!onMenu) return
-                        e.preventDefault()
-                        onMenu(block, e.clientX, e.clientY)
-                      }}
-                      onPointerDown={(e) => {
-                        hold.onPointerDown(e)
-                        holdTarget.current = block
-                      }}
-                      onPointerMove={hold.onPointerMove}
-                      onPointerUp={hold.onPointerUp}
-                      onPointerCancel={hold.onPointerCancel}
                     >
-                      {readOnly && (
-                        <span className="block-mark" aria-label="From Google Calendar">
-                          ◷
-                        </span>
-                      )}
-                      <span className="block-title">
-                        {block.title}
-                        {block.completesTask && (
-                          <span className="done-badge"> (COMPLETED)</span>
-                        )}
-                      </span>
-                      <span className="block-time">{range}</span>
-
-                      {canDrag && (
-                        <>
-                          {/*
-                            Moving has its own handle. The body used to start
-                            the move, but the resize strips are 10px at each
-                            edge and a 30-minute block is barely 30px tall —
-                            so on exactly the blocks that need it most, aiming
-                            for "move" hit "resize" instead.
-                          */}
-                          <span
-                            className="block-grip"
-                            role="button"
-                            aria-label={`Move ${block.title}`}
-                            onPointerDown={(e) => beginDrag(e, block, 'move', d)}
-                          >
-                            ⠿
+                      <div
+                        className={[
+                          'block',
+                          block.kind,
+                          height * 24 * 60 < TWO_LINE_MINUTES ? 'is-short' : '',
+                          // a lane inside a week column is ~40px: showing "10:…"
+                          // beside "see…" helps nobody, so the name takes it all
+                          days.length > 1 && lanes > 1 ? 'is-narrow' : '',
+                          block.running ? 'is-running' : '',
+                          block.completed ? 'is-done' : '',
+                          canDrag ? 'is-draggable' : '',
+                          readOnly ? 'is-external' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        title={`${block.title} — ${range}`}
+                        data-color={block.color ?? undefined}
+                        onContextMenu={(e) => {
+                          if (!onMenu || busy) return
+                          e.preventDefault()
+                          onMenu(block, e.clientX, e.clientY)
+                        }}
+                        onPointerDown={(e) => {
+                          if (busy) return
+                          hold.onPointerDown(e)
+                          holdTarget.current = block
+                        }}
+                        onPointerMove={hold.onPointerMove}
+                        onPointerUp={hold.onPointerUp}
+                        onPointerCancel={hold.onPointerCancel}
+                      >
+                        {readOnly && (
+                          <span className="block-mark" aria-label="From Google Calendar">
+                            ◷
                           </span>
-                          <span
-                            className="grab-edge top"
-                            onPointerDown={(e) => beginDrag(e, block, 'start', d)}
-                          />
-                          <span
-                            className="grab-edge bottom"
-                            onPointerDown={(e) => beginDrag(e, block, 'end', d)}
-                          />
-                        </>
-                      )}
+                        )}
+                        <span className="block-title">
+                          {block.title}
+                          {block.completesTask && (
+                            <span className="done-badge"> (COMPLETED)</span>
+                          )}
+                        </span>
+                        <span className="block-time">{range}</span>
+
+                        {canDrag && (
+                          <>
+                            <span
+                              className="grab-edge top"
+                              onPointerDown={(e) => beginDrag(e, block, 'start', d)}
+                            />
+                            <span
+                              className="grab-edge bottom"
+                              onPointerDown={(e) => beginDrag(e, block, 'end', d)}
+                            />
+                          </>
+                        )}
+                      </div>
 
                       {/*
-                        Only a trailed block: the × removes one record of time.
-                        On a scheduled block it would delete the task, which now
-                        belongs to the sequence alone.
+                        Outside the block, under its bottom-right corner.
+                        Inside, the grip and the × collided on anything short,
+                        and both competed with the resize strips for the same
+                        few pixels. Out here their room does not depend on how
+                        long the block happens to be.
                       */}
-                      {onDelete && block.kind === 'trailed' && !readOnly && (
-                        <button
-                          className="block-delete"
-                          aria-label={`Delete ${block.title}`}
-                          // the block itself begins a drag on pointerdown
-                          onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onDelete(block)
-                          }}
-                        >
-                          ×
-                        </button>
+                      {(canDrag || canDelete) && (
+                        <div className="block-controls">
+                          {canDelete && (
+                            <button
+                              className="block-delete"
+                              aria-label={`Delete ${block.title}`}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onDelete?.(block)
+                              }}
+                            >
+                              ×
+                            </button>
+                          )}
+                          {canDrag && (
+                            <span
+                              className="block-grip"
+                              role="button"
+                              aria-label={`Move ${block.title}`}
+                              onPointerDown={(e) => beginDrag(e, block, 'move', d)}
+                            >
+                              ⠿
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   )
@@ -519,12 +538,7 @@ export default function Timeline({
                   const height = (live.end.getTime() - live.start.getTime()) / span
                   return (
                     <div
-                      className={
-                        touched
-                          ? 'block draft-block is-draggable is-named'
-                          : 'block draft-block is-draggable'
-                      }
-                      data-color={draftColor ?? undefined}
+                      className="block-wrap is-drafting"
                       style={{
                         top: `${top * 100}%`,
                         height: `${height * 100}%`,
@@ -532,28 +546,39 @@ export default function Timeline({
                         width: '100%',
                       }}
                     >
-                      <span className="block-title">
-                        {draftTitle.trim() || 'New block'}
-                      </span>
-                      <span className="block-time">
-                        {formatRange(live.start, live.end, tz)}
-                      </span>
-                      <span
-                        className="block-grip"
-                        role="button"
-                        aria-label="Move the new block"
-                        onPointerDown={(e) => beginDrag(e, null, 'move', d, live)}
+                      <div
+                        className={
+                          touched
+                            ? 'block draft-block is-draggable is-named'
+                            : 'block draft-block is-draggable'
+                        }
+                        data-color={draftColor ?? undefined}
                       >
-                        ⠿
-                      </span>
-                      <span
-                        className="grab-edge top"
-                        onPointerDown={(e) => beginDrag(e, null, 'start', d, live)}
-                      />
-                      <span
-                        className="grab-edge bottom"
-                        onPointerDown={(e) => beginDrag(e, null, 'end', d, live)}
-                      />
+                        <span className="block-title">
+                          {draftTitle.trim() || 'New block'}
+                        </span>
+                        <span className="block-time">
+                          {formatRange(live.start, live.end, tz)}
+                        </span>
+                        <span
+                          className="grab-edge top"
+                          onPointerDown={(e) => beginDrag(e, null, 'start', d, live)}
+                        />
+                        <span
+                          className="grab-edge bottom"
+                          onPointerDown={(e) => beginDrag(e, null, 'end', d, live)}
+                        />
+                      </div>
+                      <div className="block-controls">
+                        <span
+                          className="block-grip"
+                          role="button"
+                          aria-label="Move the new block"
+                          onPointerDown={(e) => beginDrag(e, null, 'move', d, live)}
+                        >
+                          ⠿
+                        </span>
+                      </div>
                     </div>
                   )
                 })()}

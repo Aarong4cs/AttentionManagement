@@ -180,20 +180,30 @@ button:disabled {
 .seq li {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
+  /* 0.75 spent nearly 50px of a 320px row on gaps alone */
+  gap: 0.5rem;
+  padding: 0.6rem 0.6rem;
   border-top: 1px solid var(--line);
 }
 .seq li:first-child {
   border-top: none;
 }
 
+/*
+ * Two lines before it gives up. The row spends its width on a grip, a tick, a
+ * tag and a Start button, which left the name a little over a third of it —
+ * and a sequence of "Follow up with pro…" is a list you cannot read.
+ */
 .seq .title {
   flex: 1;
   min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 /* completed tasks keep their position and are struck through */
@@ -402,8 +412,28 @@ input[type='checkbox'] {
   background: var(--bg);
 }
 
+/*
+ * The wrapper is the block's rectangle; the block fills it and clips, while
+ * the controls hang below it and do not. Hovering a control still counts as
+ * hovering the wrapper, because hover follows the element tree rather than
+ * the box, which is what keeps them reachable on the way down.
+ */
+.block-wrap {
+  position: absolute;
+}
+.block-wrap:hover,
+.block-wrap.is-grabbed,
+.block-wrap.is-drafting {
+  z-index: 6;
+}
+/* a draft owns the timeline: everything else stops offering anything */
+.block-wrap.is-muted {
+  opacity: 0.45;
+}
+
 .block {
   position: absolute;
+  inset: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -466,12 +496,25 @@ input[type='checkbox'] {
   opacity: 0.75;
 }
 
+/*
+ * Titles wrap. One nowrap line meant "End of studying blocks, Start Attention
+ * managem…" on a block with three empty lines under it, and a week column is
+ * narrow enough that almost everything was an ellipsis. The block still clips,
+ * so height is what limits this — and the grip and × moved outside, which gave
+ * the text its full width back.
+ */
 .block-title {
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
   overflow: hidden;
-  text-overflow: ellipsis;
   max-width: 100%;
+}
+
+/* too short for a second line: one line and an ellipsis, as before */
+.block.is-short .block-title {
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .block-time {
@@ -796,9 +839,8 @@ input[type='number'] {
   /* or a vertical drag scrolls the timeline instead of moving the block */
   touch-action: none;
 }
-.block.is-grabbed {
+.block-wrap.is-grabbed .block {
   cursor: grabbing;
-  z-index: 4;
   box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
 }
 
@@ -827,39 +869,55 @@ input[type='number'] {
  * unambiguously "move". Above the strips in the stack so it wins the hit test
  * where they do overlap on the shortest blocks.
  */
-.block-grip {
+.block-controls {
   position: absolute;
-  right: 1px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 2;
+  /* just under the block's own bottom-right corner */
+  top: 100%;
+  right: 0;
+  margin-top: 2px;
+  display: none;
+  gap: 3px;
+  /* the × sits to the left of the grip */
+  flex-direction: row;
+}
+.block-wrap:hover .block-controls,
+.block-wrap:focus-within .block-controls,
+.block-wrap.is-grabbed .block-controls,
+/* touch has no hover, and a draft's handle must be there to be found */
+.block-wrap.is-drafting .block-controls {
+  display: flex;
+}
+
+.block-controls > * {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1.15rem;
-  border-radius: 4px;
-  background: rgb(0 0 0 / 0.22);
-  color: inherit;
-  font-size: 0.7rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--field);
+  color: var(--fg);
+  font-size: 0.75rem;
   line-height: 1;
-  opacity: 0.75;
-  cursor: grab;
+  cursor: pointer;
   /* or a vertical drag scrolls the timeline instead of moving the block */
   touch-action: none;
 }
-.block-grip:active {
+.block-controls .block-grip {
+  cursor: grab;
+}
+.block-controls .block-grip:active {
   cursor: grabbing;
-  opacity: 1;
 }
-/* keep the text clear of it */
-.block.is-draggable .block-title,
-.block.is-draggable .block-time {
-  padding-right: 1.15rem;
+.block-controls .block-delete:hover {
+  border-color: var(--err);
+  color: var(--err);
 }
-.block.is-short.is-draggable .block-time {
-  padding-right: 1.15rem;
-}
+
+
 
 .block:hover .grab-edge::after,
 .block.is-grabbed .grab-edge::after {
@@ -880,40 +938,14 @@ input[type='number'] {
   bottom: 3px;
 }
 
-.block-delete {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  min-height: 0;
-  width: 1.15rem;
-  height: 1.15rem;
-  padding: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 4px;
-  background: rgb(0 0 0 / 0.3);
-  color: inherit;
-  font-size: 0.9rem;
-  line-height: 1;
-}
-.block:hover .block-delete,
-.block:focus-within .block-delete {
-  display: flex;
-}
-.block-delete:hover {
-  background: var(--err);
-  color: #fff;
-}
-
-/* a touch screen has no hover, so the control has to be permanent there */
+/*
+ * Touch has no hover, so the cluster is permanent there rather than a control
+ * you can never reach. It no longer has to hide on short blocks — being
+ * outside the block is the whole point.
+ */
 @media (hover: none) {
-  .block-delete {
+  .block-wrap .block-controls {
     display: flex;
-  }
-  .block.is-short .block-delete {
-    display: none;
   }
 }
 
