@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { dragBlock, layoutDay, nowOffset, snap } from '../lib/layout'
 import { formatRange } from '../lib/time'
 import { useLongPress } from '../hooks/useLongPress'
+import NewBlock from './NewBlock'
 import type { Block } from '../lib/types'
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h)
@@ -44,7 +45,8 @@ export interface TimelineDay {
  * both views share all of this and the single range query that feeds it.
  */
 type Grab = {
-  block: Block
+  /** null while dragging the draft, which is not a block until it is saved */
+  block: Block | null
   mode: 'move' | 'start' | 'end'
   originY: number
   /** ms represented by one pixel, measured from the rendered column */
@@ -72,7 +74,7 @@ export default function Timeline({
   onReschedule?: (block: Block, start: Date, end: Date) => void
   onDelete?: (block: Block) => void
   onMenu?: (block: Block, x: number, y: number) => void
-  onCreate?: (start: Date, minutes: number, title: string) => void
+  onCreate?: (start: Date, end: Date, title: string, color: string | null) => void
 }) {
   const scroller = useRef<HTMLDivElement>(null)
   const scrolled = useRef(false)
@@ -90,10 +92,18 @@ export default function Timeline({
     rescheduleRef.current = onReschedule
   })
   const holdTarget = useRef<Block | null>(null)
-  const [draft, setDraft] = useState<{ day: TimelineDay; start: Date; top: number } | null>(
-    null,
-  )
-  const [draftTitle, setDraftTitle] = useState('')
+  /*
+   * An unsaved block. It exists only on screen: you place and size it first,
+   * and nothing is written until the sheet is filled in and saved. Opening a
+   * focused field the instant you touch the grid put a keyboard over the very
+   * thing you were trying to aim at.
+   */
+  const [draft, setDraft] = useState<{
+    day: TimelineDay
+    start: Date
+    end: Date
+  } | null>(null)
+  const [editing, setEditing] = useState(false)
   const hold = useLongPress((x, y) => {
     // a hold is not a drag: drop whatever the pointer had picked up
     setGrab(null)
@@ -108,11 +118,12 @@ export default function Timeline({
    */
   function beginDrag(
     e: ReactPointerEvent<HTMLElement>,
-    block: Block,
+    block: Block | null,
     mode: Grab['mode'],
     day: TimelineDay,
+    range?: { start: Date; end: Date },
   ) {
-    if (!onReschedule || block.running) return
+    if (block && (!onReschedule || block.running)) return
     e.preventDefault()
     e.stopPropagation()
     const column = (e.currentTarget as HTMLElement).closest('.tl-col')
@@ -125,11 +136,23 @@ export default function Timeline({
       originY: e.clientY,
       msPerPx: (day.end.getTime() - day.start.getTime()) / height,
       originDay: day,
-      start: block.start,
-      end: block.end ?? now,
+      start: range?.start ?? block!.start,
+      end: range?.end ?? block!.end ?? now,
     })
-    setPreview({ start: block.start, end: block.end ?? now })
+    setPreview(range ?? { start: block!.start, end: block!.end ?? now })
   }
+
+  // Escape drops an unsaved draft, the same way it dismissed the old field
+  useEffect(() => {
+    if (!draft) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setEditing(false)
+      setDraft(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [draft])
 
   const todayCol = days.find((d) => d.isToday)
   const marker = todayCol ? nowOffset(todayCol.start, todayCol.end, now) : null
@@ -187,11 +210,26 @@ export default function Timeline({
 
     const onUp = () => {
       const next = previewRef.current
-      if (next) {
+      if (next && grab.block) {
         const moved =
           next.start.getTime() !== grab.start.getTime() ||
           next.end.getTime() !== grab.end.getTime()
         if (moved) rescheduleRef.current?.(grab.block, next.start, next.end)
+      } else if (next) {
+        // the draft is not persisted, so a move is just its new position —
+        // including into another column, which the day it lands in decides
+        setDraft((d) =>
+          d
+            ? {
+                day:
+                  daysRef.current.find(
+                    (x) => next.start >= x.start && next.start < x.end,
+                  ) ?? d.day,
+                start: next.start,
+                end: next.end,
+              }
+            : d,
+        )
       }
       previewRef.current = null
       setGrab(null)
@@ -209,6 +247,7 @@ export default function Timeline({
   }, [grab])
 
   return (
+    <>
     <div className="timeline" ref={scroller}>
       <div
         // week columns are too narrow for a second line of text; the title wins
@@ -244,9 +283,9 @@ export default function Timeline({
           {days.map((d) => {
             // while dragging, lay out against the previewed times so the block
             // follows the pointer instead of snapping back on release
-            const shown = grab && preview
+            const shown = grab?.block && preview
               ? blocks.map((b) =>
-                  b.kind === grab.block.kind && b.id === grab.block.id
+                  b.kind === grab.block!.kind && b.id === grab.block!.id
                     ? { ...b, start: preview.start, end: preview.end }
                     : b,
                 )
@@ -268,9 +307,8 @@ export default function Timeline({
                   setDraft({
                     day: d,
                     start: new Date(at),
-                    top: (at - d.start.getTime()) / span,
+                    end: new Date(at + NEW_BLOCK_MINUTES * 60_000),
                   })
-                  setDraftTitle('')
                 }}
               >
                 {HOURS.map((h) => (
@@ -299,7 +337,7 @@ export default function Timeline({
                         block.completed ? 'is-done' : '',
                         canDrag ? 'is-draggable' : '',
                         readOnly ? 'is-external' : '',
-                        grab?.block.id === block.id ? 'is-grabbed' : '',
+                        grab?.block?.id === block.id ? 'is-grabbed' : '',
                       ]
                         .filter(Boolean)
                         .join(' ')}
@@ -374,39 +412,38 @@ export default function Timeline({
                   )
                 })}
 
-                {draft && draft.day.key === d.key && (
-                  <form
-                    className="draft"
-                    style={{
-                      top: `${draft.top * 100}%`,
-                      height: `${(NEW_BLOCK_MINUTES / (24 * 60)) * 100}%`,
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      const t = draftTitle.trim()
-                      if (t) onCreate?.(draft.start, NEW_BLOCK_MINUTES, t)
-                      setDraft(null)
-                    }}
-                  >
-                    <input
-                      autoFocus
-                      value={draftTitle}
-                      placeholder={formatRange(
-                        draft.start,
-                        new Date(draft.start.getTime() + NEW_BLOCK_MINUTES * 60_000),
-                        tz,
-                      )}
-                      onChange={(e) => setDraftTitle(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Escape' && setDraft(null)}
-                      onBlur={() => {
-                        const t = draftTitle.trim()
-                        if (t) onCreate?.(draft.start, NEW_BLOCK_MINUTES, t)
-                        setDraft(null)
+                {draft && draft.day.key === d.key && (() => {
+                  const span = d.end.getTime() - d.start.getTime()
+                  // mid-gesture the preview leads, exactly as a block's does
+                  const live = grab && !grab.block && preview ? preview : draft
+                  const top = (live.start.getTime() - d.start.getTime()) / span
+                  const height = (live.end.getTime() - live.start.getTime()) / span
+                  return (
+                    <div
+                      className="block draft-block is-draggable"
+                      style={{
+                        top: `${top * 100}%`,
+                        height: `${height * 100}%`,
+                        left: 0,
+                        width: '100%',
                       }}
-                    />
-                  </form>
-                )}
+                      onPointerDown={(e) => beginDrag(e, null, 'move', d, live)}
+                    >
+                      <span className="block-title">New block</span>
+                      <span className="block-time">
+                        {formatRange(live.start, live.end, tz)}
+                      </span>
+                      <span
+                        className="grab-edge top"
+                        onPointerDown={(e) => beginDrag(e, null, 'start', d, live)}
+                      />
+                      <span
+                        className="grab-edge bottom"
+                        onPointerDown={(e) => beginDrag(e, null, 'end', d, live)}
+                      />
+                    </div>
+                  )
+                })()}
 
                 {d.isToday && marker !== null && (
                   <div className="now" style={{ top: `${marker * 100}%` }} />
@@ -417,5 +454,36 @@ export default function Timeline({
         </div>
       </div>
     </div>
+
+    {/*
+      Pinned under the grid rather than drawn inside the draft: a 30-minute
+      block is about 30px tall, and in the week view a column is narrower
+      than these two buttons. Down here it is the same size and in the same
+      place whatever you have drawn, and on a phone it is under your thumb.
+    */}
+    {draft && (
+      <div className="draft-bar">
+        <span className="draft-range">
+          {formatRange(draft.start, draft.end, tz)}
+        </span>
+        <button className="chip" onClick={() => setDraft(null)}>
+          Discard
+        </button>
+        <button onClick={() => setEditing(true)}>Name it…</button>
+      </div>
+    )}
+
+    {draft && editing && (
+      <NewBlock
+        range={formatRange(draft.start, draft.end, tz)}
+        onCancel={() => setEditing(false)}
+        onSave={(title, color) => {
+          onCreate?.(draft.start, draft.end, title, color)
+          setEditing(false)
+          setDraft(null)
+        }}
+      />
+    )}
+    </>
   )
 }

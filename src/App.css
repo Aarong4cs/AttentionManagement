@@ -1033,31 +1033,52 @@ input[type='number'] {
 
 /* click empty track to create ------------------------------------------ */
 
-.draft {
-  position: absolute;
-  left: 0;
-  right: 0;
-  min-height: 1.4rem;
-  padding: 0.1rem;
-  border-radius: 5px;
+/* an unsaved block: placed and sized on the grid, written only on save ----- */
+
+.draft-block {
   border: 1px dashed var(--sched-line);
   background: var(--sched-bg);
   z-index: 5;
+  cursor: grab;
+  /* or a vertical drag scrolls the timeline instead of moving the draft */
+  touch-action: none;
 }
-.draft input {
-  width: 100%;
-  padding: 0.15rem 0.3rem;
-  border: none;
-  background: none;
-  color: inherit;
-  font: inherit;
-  /* Not 0.75rem, however well that matched a block label. Safari zooms the
-     whole page in when a focused field is under 16px, and this one is focused
-     the instant you tap the timeline. Same rule as the other text fields. */
-  font-size: max(1rem, 16px);
+.draft-block .block-title {
+  color: var(--muted);
+  font-style: italic;
 }
-.draft input:focus {
-  outline: none;
+/* the resize edges are always live here: there is nothing else to grab for */
+.draft-block .grab-edge::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1.4rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--sched-line);
+}
+.draft-block .grab-edge.top::after {
+  top: 3px;
+}
+.draft-block .grab-edge.bottom::after {
+  bottom: 3px;
+}
+
+.draft-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+.draft-range {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
 }
 
 /* rename in place ------------------------------------------------------ */

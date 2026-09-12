@@ -116,8 +116,10 @@ export default function Today({ email }: { email: string }) {
   }
 
   /** A click on empty track: a scheduled block, so it lands on the timeline. */
-  function onCreateAt(start: Date, minutes: number, title: string) {
+  function onCreateAt(start: Date, end: Date, title: string, color: string | null) {
     const at = new Date().toISOString()
+    // the draft was resized on the grid, so its own end is the estimate
+    const minutes = Math.max(1, Math.round((end.getTime() - start.getTime()) / 60_000))
     enqueue({
       op: 'createTask',
       at,
@@ -125,11 +127,12 @@ export default function Today({ email }: { email: string }) {
         id: newId(),
         user_id: snap.profile?.id ?? '',
         title,
+        color,
         rank: rankAppend(snap.tasks.map((x) => x.rank)),
         due_at: start.toISOString(),
         estimated_minutes: minutes,
         // mirrors the trigger, so the block draws at its full height at once
-        scheduled_end: new Date(start.getTime() + minutes * 60_000).toISOString(),
+        scheduled_end: end.toISOString(),
       }),
     })
   }
