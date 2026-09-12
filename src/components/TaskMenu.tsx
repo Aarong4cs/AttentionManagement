@@ -22,7 +22,6 @@ export default function TaskMenu({
   onRecolor,
   onPrioritise,
   onNotes,
-  onRepeat,
   onDeleteTask,
   onDeleteEntry,
 }: {
@@ -32,7 +31,6 @@ export default function TaskMenu({
   onRecolor: (taskId: string, color: string | null) => void
   onPrioritise: (taskId: string, priority: number | null) => void
   onNotes: (taskId: string, notes: string) => void
-  onRepeat: (taskId: string) => void
   /** Omitted on the timeline: removing a whole task belongs to the sequence. */
   onDeleteTask?: (taskId: string) => void
   onDeleteEntry?: (entryId: string) => void
@@ -191,18 +189,6 @@ export default function TaskMenu({
                 </button>
               ))}
             </div>
-
-            {!target.readOnly && (
-              <button
-                role="menuitem"
-                onClick={() => {
-                  onRepeat(target.taskId)
-                  onClose()
-                }}
-              >
-                Make repeating…
-              </button>
-            )}
 
             {onDeleteEntry && target.entryId && !target.readOnly && (
               <button

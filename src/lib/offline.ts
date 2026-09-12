@@ -248,17 +248,20 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
   }
 
   /*
-   * Rank alone, and deliberately so. Sorting by priority first made rank a
-   * tiebreaker inside a group, and a drag can only ever write a rank — so
-   * dropping across a group boundary asked rankBetween for a key between two
-   * neighbours whose ranks were in no particular order. It does not reject
-   * that: generateKeyBetween('a1', 'a0') returns 'a0V' rather than throwing,
-   * so the row landed somewhere unrelated to where it was dropped. Priority
-   * is a tag on a task, not a position in the list.
+   * Tagged first, highest priority at the top, manual rank inside each group.
+   *
+   * This ordering is only safe because a drag cannot leave its group. Rank is
+   * the secondary key, so ranks either side of a group boundary are in no
+   * particular order, and asking rankBetween for a key between two of them
+   * silently returns nonsense — generateKeyBetween('a1', 'a0') gives 'a0V'
+   * rather than throwing. Confining the drag is what keeps every pair it is
+   * ever asked about correctly ordered.
    */
   s.tasks = alive(s.tasks).sort(
     (a, b) =>
-      (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) || (a.id < b.id ? -1 : 1),
+      (a.priority ?? Infinity) - (b.priority ?? Infinity) ||
+      (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) ||
+      (a.id < b.id ? -1 : 1),
   )
   s.rangeTasks = alive(s.rangeTasks)
   s.entries = alive(s.entries)

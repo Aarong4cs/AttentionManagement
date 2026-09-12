@@ -382,6 +382,15 @@ export default function Timeline({
     }
 
     const onUp = () => {
+      /*
+       * The click that follows belongs to the drag, not to the track.
+       *
+       * A resize ends with the pointer over the column — the edge it started
+       * on has moved out from under it — so the browser fires the click at
+       * their common ancestor, which IS the column. Letting that through
+       * opened a new draft every time a block was resized.
+       */
+      dragged.current = true
       const next = previewRef.current
       if (next && grab.block) {
         const moved =
@@ -464,6 +473,10 @@ export default function Timeline({
                 onClick={(e) => {
                   // only empty track, never a block or its controls
                   if (!onCreate || e.target !== e.currentTarget) return
+                  if (dragged.current) {
+                    dragged.current = false
+                    return
+                  }
                   const r = e.currentTarget.getBoundingClientRect()
                   const span = d.end.getTime() - d.start.getTime()
                   const at = snap(

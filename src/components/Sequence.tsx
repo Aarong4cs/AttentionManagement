@@ -25,6 +25,15 @@ type Drag = {
   id: Uuid
   /** index of the dragged row in the original list */
   from: number
+  /**
+   * The positions this row is allowed to take, as original indices, `hi`
+   * exclusive. A P1 cannot be dragged in among the P3s: the list is sorted by
+   * priority first, so a row dropped outside its group would be sorted
+   * straight back and the rank written for it would have been derived from two
+   * neighbours in no particular order. Priority is changed from the menu.
+   */
+  lo: number
+  hi: number
   mids: number[]
   /** the floating row's box, so it sits exactly over the list it came from */
   left: number
@@ -38,7 +47,9 @@ type Drag = {
 /** Where the pointer says the row belongs, in original-list coordinates. */
 function targetIndex(drag: Drag, clientY: number): number {
   const scrolled = (drag.scroller?.scrollTop ?? 0) - drag.scrollTop
-  return insertionIndex(drag.mids, clientY + scrolled)
+  const raw = insertionIndex(drag.mids, clientY + scrolled)
+  // the row follows the pointer, but the slot stops at its group's edges
+  return Math.min(Math.max(raw, drag.lo), drag.hi)
 }
 
 /** ...and the same thing as an index into the list without the dragged row. */
@@ -110,9 +121,17 @@ export default function Sequence({
     const self = rows.current.get(task.id)?.getBoundingClientRect()
     const box = list.current?.getBoundingClientRect()
     if (from < 0 || !self || !box) return
+    // the group is contiguous, because the list is sorted by priority first
+    const same = (t: Task) => (t.priority ?? null) === (task.priority ?? null)
+    let lo = from
+    let hi = from
+    while (lo > 0 && same(tasks[lo - 1])) lo--
+    while (hi < tasks.length - 1 && same(tasks[hi + 1])) hi++
     setDrag({
       id: task.id,
       from,
+      lo,
+      hi: hi + 1,
       mids: tasks.map((t) => {
         const r = rows.current.get(t.id)?.getBoundingClientRect()
         return r ? r.top + r.height / 2 : Infinity

@@ -5,13 +5,11 @@ import { draftTask, elapsedMs, getProfile, isStale, newId } from '../lib/db'
 import { minutesBetween } from '../lib/layout'
 import { buildBlocks, loadSnapshot } from '../lib/offline'
 import { rankAppend, rankBetween } from '../lib/rank'
-import { materializeAll } from '../lib/recurrence'
 import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
 import { addDays, startOfWeek, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
 import type { Block, Task } from '../lib/types'
 import Timeline, { type TimelineDay } from './Timeline'
 import Sequence from './Sequence'
-import Recurrences from './Recurrences'
 import TaskMenu, { type MenuTarget } from './TaskMenu'
 import GoogleCalendar from './GoogleCalendar'
 import Settings from './Settings'
@@ -43,14 +41,12 @@ export default function Today({ email }: { email: string }) {
   const [title, setTitle] = useState('')
   const [tab, setTab] = useState<'timeline' | 'sequence'>('timeline')
   const [view, setView] = useState<'day' | 'week'>('day')
-  const [showRules, setShowRules] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [slowSync, setSlowSync] = useState(false)
   const [menu, setMenu] = useState<(MenuTarget & { fromSequence: boolean }) | null>(
     null,
   )
-  const [repeatFor, setRepeatFor] = useState<Task | null>(null)
   const now = useNow()
 
   useEffect(() => {
@@ -61,9 +57,6 @@ export default function Today({ email }: { email: string }) {
           setTz(p.timezone)
           setDay(todayIn(p.timezone))
         }
-        // expanding on every open is safe: the unique occurrence index makes
-        // materialization idempotent, from either device, concurrently
-        return materializeAll()
       })
       .catch(() => {
         // offline: the cached zone stands until the network returns
@@ -217,7 +210,6 @@ export default function Today({ email }: { email: string }) {
        */
       fromSequence: block.kind === 'scheduled' && block.source === null,
     })
-    if (task) setRepeatFor(task)
   }
 
   function openTaskMenu(task: Task, x: number, y: number) {
@@ -231,7 +223,6 @@ export default function Today({ email }: { email: string }) {
       y,
       fromSequence: true,
     })
-    setRepeatFor(task)
   }
 
   function onComplete(task: Task) {
@@ -424,11 +415,6 @@ export default function Today({ email }: { email: string }) {
               notes: notes.trim() === '' ? null : notes.trim(),
             })
           }
-          onRepeat={() => {
-            // hand the task to the recurrence sheet, which already knows how to
-            // build a rule; no second implementation of that form
-            setShowRules(true)
-          }}
           onDeleteTask={
             // deleting the whole task belongs to the sequence; the timeline
             // only ever removes a single record of time
@@ -459,17 +445,6 @@ export default function Today({ email }: { email: string }) {
         />
       )}
 
-      {showRules && (
-        <Recurrences
-          tz={tz}
-          seed={repeatFor}
-          onClose={() => {
-            setShowRules(false)
-            setRepeatFor(null)
-          }}
-          onChanged={data.refresh}
-        />
-      )}
     </div>
   )
 }

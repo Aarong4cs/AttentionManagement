@@ -324,7 +324,8 @@ export async function getSequence(today?: DateOnly): Promise<Task[]> {
     query = query.or(`recurrence_id.is.null,occurrence_date.eq.${today}`)
   }
   const { data, error } = await query
-    // the manual order, and only that — see the sort in applyOps
+    // must match the sort in applyOps, or the cache and the server disagree
+    .order('priority', { ascending: true, nullsFirst: false })
     .order('rank')
     .order('id')
   if (error) throw error

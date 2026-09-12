@@ -427,6 +427,13 @@ input[type='checkbox'] {
  */
 .block-wrap {
   position: absolute;
+  /*
+   * Must match the block's own floor. A few seconds of tracked time is about a
+   * tenth of a pixel of the day, and the block bottomed out at 1rem while the
+   * wrapper did not — so `top: 100%` put the controls a tenth of a pixel down,
+   * on top of the block instead of under it.
+   */
+  min-height: 1rem;
 }
 .block-wrap.is-grabbed,
 .block-wrap.is-drafting {
