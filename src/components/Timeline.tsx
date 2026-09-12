@@ -392,12 +392,24 @@ export default function Timeline({
        */
       dragged.current = true
       const next = previewRef.current
-      if (next && grab.block) {
-        const moved =
-          next.start.getTime() !== grab.start.getTime() ||
-          next.end.getTime() !== grab.end.getTime()
-        if (moved) rescheduleRef.current?.(grab.block, next.start, next.end)
-      } else if (next) {
+      const moved =
+        next !== null &&
+        (next.start.getTime() !== grab.start.getTime() ||
+          next.end.getTime() !== grab.end.getTime())
+      if (grab.block) {
+        if (next && moved) {
+          rescheduleRef.current?.(grab.block, next.start, next.end)
+        } else {
+          /*
+           * A press that went nowhere is a tap, whatever it landed on — and
+           * `next` is null when the pointer never moved at all, since only
+           * the move handler fills it in. Without this, pressing a resize
+           * strip swallowed its own click, and a block too short to have any
+           * body left could never be selected at all.
+           */
+          setActiveKey(`${grab.block.kind}-${grab.block.id}`)
+        }
+      } else if (next && moved) {
         // the draft is not persisted, so a move is just its new position —
         // including into another column, which the day it lands in decides
         setDraft((d) =>

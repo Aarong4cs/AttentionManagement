@@ -874,6 +874,15 @@ input[type='number'] {
 .grab-edge.bottom {
   bottom: -2px;
 }
+/*
+ * On a very short block the two 10px strips met in the middle and covered the
+ * whole thing, so there was no body left to press and no way to select it —
+ * the only way in was to resize it bigger first, which is the one thing you
+ * could still do. A third each leaves a third in the middle.
+ */
+.block.is-short .grab-edge {
+  height: 33%;
+}
 
 /*
  * The move handle.
