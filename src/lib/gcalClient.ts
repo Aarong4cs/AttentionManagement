@@ -31,12 +31,57 @@ async function bearer(): Promise<string | null> {
 }
 
 /**
- * Call a server route, refreshing the session once if it is rejected.
+ * One token refresh at a time, shared by every caller.
  *
- * getSession() returns whatever is in storage, which after an hour is an
- * expired access token — the server then refuses it and the sheet shows a bare
- * 401 while the app around it still looks signed in. Refreshing and retrying
- * once turns that into nothing the user ever sees.
+ * A failed `refreshSession()` does NOT mean the session is gone. It reports
+ * that *our particular attempt* failed, and auth-js deliberately keeps the
+ * session alive in three cases that happen constantly here:
+ *
+ *   - another client rotated the token while ours was in flight and had ours
+ *     discarded — a second tab, the installed PWA, the other device, or this
+ *     tab's own 30s auto-refresh ticker;
+ *   - the network blipped, which is retryable by definition;
+ *   - the refresh was proactive (within 90s of expiry) and the access token is
+ *     still perfectly valid.
+ *
+ * So when the refresh reports failure, ask storage what actually survived
+ * rather than believing it. Whoever won the race left a good token behind.
+ *
+ * It is also bounded. A refresh that cannot reach the network retries with
+ * backoff behind a lock, and an unbounded wait on it leaves the sheet on
+ * "Loading…" forever — the stored token is worth trying long before that.
+ */
+let refreshing: Promise<string | null> | null = null
+
+const REFRESH_TIMEOUT_MS = 6_000
+
+function refreshOnce(): Promise<string | null> {
+  refreshing ??= (async () => {
+    try {
+      const refreshed = await Promise.race([
+        supabase.auth.refreshSession().then((r) => r.data.session?.access_token),
+        new Promise<undefined>((r) => setTimeout(r, REFRESH_TIMEOUT_MS)),
+      ])
+      return refreshed ?? (await bearer())
+    } catch {
+      return await bearer()
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
+}
+
+/**
+ * Call a server route, refreshing the session if it is rejected.
+ *
+ * An access token that expires between `getSession()` and the server reading
+ * it, or one rotated out from under us mid-race, produces a 401 while the user
+ * is still entirely signed in. Both are transient, so both are worth retrying;
+ * only a genuinely absent session earns the "sign in again" message. Getting
+ * that distinction wrong is worse than it sounds: auth-js caches a refresh
+ * failure for a minute, so one bogus verdict repeats on every attempt until
+ * the cooldown lapses.
  */
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const send = async (token: string) =>
@@ -50,10 +95,11 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
   let res = await send(token)
 
-  if (res.status === 401) {
-    const { data, error } = await supabase.auth.refreshSession()
-    const fresh = data.session?.access_token
-    if (error || !fresh) throw new Error('session expired — sign in again')
+  for (let attempt = 0; res.status === 401 && attempt < 2; attempt++) {
+    // the second round gives a concurrent refresh time to land
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 400))
+    const fresh = await refreshOnce()
+    if (!fresh) throw new Error('session expired — sign in again')
     res = await send(fresh)
   }
 
@@ -65,8 +111,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export async function connectUrl(): Promise<string> {
   // A stale token here sends the user to Google and fails at the callback,
   // after they have already granted consent — refresh before leaving the page.
-  const { data } = await supabase.auth.refreshSession()
-  const token = data.session?.access_token ?? (await bearer())
+  const token = await refreshOnce()
   if (!token) throw new Error('not signed in')
   return `/api/google/connect?token=${encodeURIComponent(token)}`
 }

@@ -68,7 +68,18 @@ export default function GoogleCalendar({
         </header>
 
         {state === null ? (
-          <p className="muted">Loading…</p>
+          /*
+           * A failed load leaves no state to render, and "Loading…" under a red
+           * error reads as a hang. Offer the retry instead — the failures that
+           * get here are transient by nature.
+           */
+          error ? (
+            <button onClick={() => { setError(null); void load() }}>
+              Try again
+            </button>
+          ) : (
+            <p className="muted">Loading…</p>
+          )
         ) : !state.connected ? (
           <>
             <p className="muted hint">
