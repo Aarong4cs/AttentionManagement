@@ -32,7 +32,7 @@ const check = (ok, msg, detail = '') => {
   if (!ok) fails++
 }
 
-for (const table of ['tasks', 'time_entries', 'recurrences', 'profiles']) {
+for (const table of ['tasks', 'time_entries', 'recurrences', 'profiles', 'subtasks']) {
   const { data, error } = await sb.from(table).select('*')
   check(
     (data ?? []).length === 0,
@@ -77,6 +77,32 @@ if (env.TEST_USER_EMAIL && env.TEST_USER_PASSWORD) {
   // the picker's table, by contrast, is ordinary user data
   const { error: calErr } = await sb.from('google_calendars').select('*')
   check(calErr === null, 'but google_calendars is readable by its owner')
+
+  /*
+   * Steps are ordinary user data — but only under a task you own. A policy that
+   * compared user_id alone would accept a step hung off a stranger's task,
+   * because the row would carry the caller's own id.
+   */
+  const { data: parent, error: parentErr } = await sb
+    .from('tasks')
+    .insert({ title: 'rls subtask probe', rank: 'a0' })
+    .select('id')
+    .single()
+  check(!parentErr, 'made a parent task for the step checks', parentErr?.code ?? '')
+  if (parent) {
+    const { error: ownErr } = await sb
+      .from('subtasks')
+      .insert({ task_id: parent.id, title: 'a step', rank: 'a0' })
+    check(ownErr === null, 'can add a step to your own task', ownErr?.code ?? '')
+    const { data: back } = await sb.from('subtasks').select('id').eq('task_id', parent.id)
+    check((back ?? []).length === 1, 'and read it back', `${(back ?? []).length} rows`)
+    await sb.from('subtasks').delete().eq('task_id', parent.id)
+    await sb.from('tasks').delete().eq('id', parent.id)
+  }
+  const { error: strayErr } = await sb
+    .from('subtasks')
+    .insert({ task_id: crypto.randomUUID(), title: 'orphan', rank: 'a0' })
+  check(strayErr !== null, 'cannot hang a step off a task that is not yours', strayErr?.code ?? 'NO ERROR')
 
   await sb.auth.signOut()
 } else {

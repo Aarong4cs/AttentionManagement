@@ -14,15 +14,18 @@ import {
   UNIQUE_VIOLATION,
   adjustEntry,
   completeTask,
+  createSubtaskRow,
   createTaskRow,
   deleteEntry,
+  deleteSubtask,
   deleteTask,
   moveTask,
   recolorTask,
+  renameSubtask,
   renameTask,
   rescheduleTask,
-  setNotes,
   setPriority,
+  setSubtaskDone,
   startTrailAt,
   stopTrail,
   uncompleteTask,
@@ -114,8 +117,17 @@ async function run(op: PendingOp): Promise<void> {
     case 'setPriority':
       await setPriority(op.taskId, op.priority)
       return
-    case 'setNotes':
-      await setNotes(op.taskId, op.notes ?? '')
+    case 'createSubtask':
+      await createSubtaskRow(op.subtask)
+      return
+    case 'toggleSubtask':
+      await setSubtaskDone(op.subtaskId, op.doneAt)
+      return
+    case 'renameSubtask':
+      await renameSubtask(op.subtaskId, op.title)
+      return
+    case 'deleteSubtask':
+      await deleteSubtask(op.subtaskId)
       return
   }
 }

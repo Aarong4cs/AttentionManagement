@@ -9,7 +9,8 @@ import {
 } from 'react'
 import { insertionIndex } from '../lib/layout'
 import { useLongPress } from '../hooks/useLongPress'
-import type { Task, Uuid } from '../lib/types'
+import type { Subtask, Task, Uuid } from '../lib/types'
+import { Checklist } from './Subtasks'
 
 /**
  * A drag in progress. Everything here is measured once, when the grip is
@@ -71,6 +72,8 @@ export default function Sequence({
   onMenu,
   onRename,
   running,
+  subtasks,
+  onToggleSubtask,
 }: {
   tasks: readonly Task[]
   runningTaskId: Uuid | null
@@ -85,6 +88,8 @@ export default function Sequence({
   onRename: (taskId: Uuid, title: string) => void
   /** The running-timer banner, rendered here so it sits above the add form. */
   running?: ReactNode
+  subtasks: readonly Subtask[]
+  onToggleSubtask: (step: Subtask) => void
 }) {
   const rows = useRef(new Map<Uuid, HTMLLIElement>())
   const list = useRef<HTMLUListElement>(null)
@@ -105,6 +110,10 @@ export default function Sequence({
   const runningTask = runningTaskId
     ? tasks.find((t) => t.id === runningTaskId)
     : undefined
+  const runningSteps = runningTask
+    ? subtasks.filter((x) => x.task_id === runningTask.id)
+    : []
+  const runningDone = runningSteps.filter((x) => x.done_at !== null).length
 
   const dragged = drag ? tasks.find((t) => t.id === drag.id) : undefined
   const others = drag ? tasks.filter((t) => t.id !== drag.id) : tasks
@@ -188,11 +197,19 @@ export default function Sequence({
     <section className="pane sequence">
       {running}
 
-      {runningTask?.notes && (
+      {/*
+        The steps of whatever is being tracked, ticked off while doing it. This
+        is where they are for; the sheet is only for writing them.
+      */}
+      {runningTask && runningSteps.length > 0 && (
         <section className="running-notes" aria-live="polite">
-          <h3>{runningTask.title}</h3>
-          {/* pre-wrap, so a list of steps stays a list of steps */}
-          <p>{runningTask.notes}</p>
+          <h3>
+            {runningTask.title}
+            <span className="steps-count">
+              {runningDone}/{runningSteps.length}
+            </span>
+          </h3>
+          <Checklist steps={runningSteps} onToggle={onToggleSubtask} />
         </section>
       )}
 

@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNow } from '../hooks/useNow'
 import { useOfflineData } from '../hooks/useOfflineData'
-import { draftTask, elapsedMs, getProfile, isStale, newId } from '../lib/db'
+import { draftSubtask, draftTask, elapsedMs, getProfile, isStale, newId } from '../lib/db'
 import { minutesBetween } from '../lib/layout'
 import { buildBlocks, loadSnapshot } from '../lib/offline'
 import { rankAppend, rankBetween } from '../lib/rank'
 import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
 import { addDays, startOfWeek, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
-import type { Block, Task } from '../lib/types'
+import type { Block, Subtask, Task, Uuid } from '../lib/types'
 import Timeline, { type TimelineDay } from './Timeline'
 import Sequence from './Sequence'
 import TaskMenu, { type MenuTarget } from './TaskMenu'
 import GoogleCalendar from './GoogleCalendar'
 import Settings from './Settings'
+import Subtasks from './Subtasks'
 
 function hhmmss(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -47,6 +48,8 @@ export default function Today({ email }: { email: string }) {
   const [menu, setMenu] = useState<(MenuTarget & { fromSequence: boolean }) | null>(
     null,
   )
+  /** The task whose steps sheet is open. */
+  const [stepsFor, setStepsFor] = useState<Uuid | null>(null)
   const now = useNow()
 
   useEffect(() => {
@@ -193,7 +196,6 @@ export default function Today({ email }: { email: string }) {
       title: block.title,
       color: block.color,
       priority: task?.priority ?? null,
-      notes: task?.notes ?? null,
       // only a trailed block has a single record of time to remove
       entryId: block.kind === 'trailed' ? block.id : undefined,
       readOnly: block.source !== null,
@@ -218,11 +220,15 @@ export default function Today({ email }: { email: string }) {
       title: task.title,
       color: task.color,
       priority: task.priority,
-      notes: task.notes,
       x,
       y,
       fromSequence: true,
     })
+  }
+
+  function toggleSubtask(step: Subtask) {
+    const at = new Date().toISOString()
+    enqueue({ op: 'toggleSubtask', at, subtaskId: step.id, doneAt: step.done_at ? null : at })
   }
 
   function onComplete(task: Task) {
@@ -355,6 +361,8 @@ export default function Today({ email }: { email: string }) {
             })
           }
           onMenu={openTaskMenu}
+          subtasks={snap.subtasks}
+          onToggleSubtask={toggleSubtask}
           running={
             snap.running ? (
               <>
@@ -407,13 +415,9 @@ export default function Today({ email }: { email: string }) {
           onPrioritise={(taskId, priority) =>
             enqueue({ op: 'setPriority', at: new Date().toISOString(), taskId, priority })
           }
-          onNotes={(taskId, notes) =>
-            enqueue({
-              op: 'setNotes',
-              at: new Date().toISOString(),
-              taskId,
-              notes: notes.trim() === '' ? null : notes.trim(),
-            })
+          onSubtasks={
+            // steps show under the timer, and only a sequence task can run
+            snap.tasks.some((t) => t.id === menu.taskId) ? setStepsFor : undefined
           }
           onDeleteTask={
             // deleting the whole task belongs to the sequence; the timeline
@@ -428,6 +432,49 @@ export default function Today({ email }: { email: string }) {
           }
         />
       )}
+
+      {stepsFor &&
+        (() => {
+          const task = snap.tasks.find((t) => t.id === stepsFor)
+          if (!task) return null
+          const steps = snap.subtasks.filter((x) => x.task_id === task.id)
+          return (
+            <Subtasks
+              task={task}
+              steps={steps}
+              onClose={() => setStepsFor(null)}
+              onAdd={(title) =>
+                enqueue({
+                  op: 'createSubtask',
+                  at: new Date().toISOString(),
+                  subtask: draftSubtask({
+                    id: newId(),
+                    user_id: snap.profile?.id ?? '',
+                    task_id: task.id,
+                    title,
+                    rank: rankAppend(steps.map((x) => x.rank)),
+                  }),
+                })
+              }
+              onToggle={toggleSubtask}
+              onRename={(step, title) =>
+                enqueue({
+                  op: 'renameSubtask',
+                  at: new Date().toISOString(),
+                  subtaskId: step.id,
+                  title,
+                })
+              }
+              onDelete={(step) =>
+                enqueue({
+                  op: 'deleteSubtask',
+                  at: new Date().toISOString(),
+                  subtaskId: step.id,
+                })
+              }
+            />
+          )
+        })()}
 
       {showSettings && (
         <Settings

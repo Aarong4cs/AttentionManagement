@@ -12,7 +12,7 @@
  * view is testable without a browser or a network.
  */
 
-import type { Block, Profile, Task, TimeEntry, Uuid } from './types'
+import type { Block, Profile, Task, TimeEntry, Uuid, Subtask } from './types'
 
 export interface EntryRow extends TimeEntry {
   /** Denormalised at fetch time so a trailed block can be drawn from cache. */
@@ -29,6 +29,8 @@ export interface Snapshot {
   rangeTasks: Task[]
   /** Trailed entries overlapping the viewed range. */
   entries: EntryRow[]
+  /** Steps under the sequence tasks, in rank order. */
+  subtasks: Subtask[]
   running: TimeEntry | null
   fetchedAt: string | null
 }
@@ -38,6 +40,7 @@ export const emptySnapshot: Snapshot = {
   tasks: [],
   rangeTasks: [],
   entries: [],
+  subtasks: [],
   running: null,
   fetchedAt: null,
 }
@@ -63,7 +66,10 @@ export type PendingOp =
   | { op: 'renameTask'; at: string; taskId: Uuid; title: string }
   | { op: 'recolorTask'; at: string; taskId: Uuid; color: string | null }
   | { op: 'setPriority'; at: string; taskId: Uuid; priority: number | null }
-  | { op: 'setNotes'; at: string; taskId: Uuid; notes: string | null }
+  | { op: 'createSubtask'; at: string; subtask: Subtask }
+  | { op: 'toggleSubtask'; at: string; subtaskId: Uuid; doneAt: string | null }
+  | { op: 'renameSubtask'; at: string; subtaskId: Uuid; title: string }
+  | { op: 'deleteSubtask'; at: string; subtaskId: Uuid }
 
 // ---------------------------------------------------------------------------
 // the optimistic view
@@ -85,6 +91,8 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
     tasks: [...snapshot.tasks],
     rangeTasks: [...snapshot.rangeTasks],
     entries: [...snapshot.entries],
+    // absent on a snapshot cached before steps existed
+    subtasks: [...(snapshot.subtasks ?? [])],
   }
 
   const patchTask = (id: Uuid, patch: Partial<Task>) => {
@@ -234,8 +242,29 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
         patchTask(op.taskId, { priority: op.priority })
         break
 
-      case 'setNotes':
-        patchTask(op.taskId, { notes: op.notes })
+      case 'createSubtask':
+        // replaying the queue over its own result must not add it twice
+        if (!s.subtasks.some((x) => x.id === op.subtask.id)) {
+          s.subtasks.push(op.subtask)
+        }
+        break
+
+      case 'toggleSubtask':
+        s.subtasks = s.subtasks.map((x) =>
+          x.id === op.subtaskId ? { ...x, done_at: op.doneAt } : x,
+        )
+        break
+
+      case 'renameSubtask':
+        s.subtasks = s.subtasks.map((x) =>
+          x.id === op.subtaskId ? { ...x, title: op.title } : x,
+        )
+        break
+
+      case 'deleteSubtask':
+        s.subtasks = s.subtasks.map((x) =>
+          x.id === op.subtaskId ? { ...x, deleted_at: op.at } : x,
+        )
         break
 
       case 'deleteEntry':
@@ -265,6 +294,11 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
   )
   s.rangeTasks = alive(s.rangeTasks)
   s.entries = alive(s.entries)
+  // a step has no priority: rank alone, as the server orders them
+  s.subtasks = alive(s.subtasks).sort(
+    (a, b) =>
+      (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) || (a.id < b.id ? -1 : 1),
+  )
   return s
 }
 
@@ -355,7 +389,11 @@ function write(key: string, value: unknown): void {
 
 export const loadQueue = (): PendingOp[] => read<PendingOp[]>(QUEUE_KEY, [])
 export const saveQueue = (ops: readonly PendingOp[]): void => write(QUEUE_KEY, ops)
-export const loadSnapshot = (): Snapshot => read<Snapshot>(SNAPSHOT_KEY, emptySnapshot)
+export const loadSnapshot = (): Snapshot => {
+  const s = read<Snapshot>(SNAPSHOT_KEY, emptySnapshot)
+  // a snapshot cached before steps existed has no such key
+  return { ...s, subtasks: s.subtasks ?? [] }
+}
 export const saveSnapshot = (s: Snapshot): void => write(SNAPSHOT_KEY, s)
 
 export function clearLocal(): void {

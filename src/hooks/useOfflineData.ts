@@ -238,6 +238,10 @@ export function useOfflineData(
         { event: '*', schema: 'public', table: 'time_entries' },
         () => void refresh(),
       )
+      // so a step ticked on the phone strikes through on the Mac
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, () =>
+        void refresh(),
+      )
       .subscribe()
 
     return () => {

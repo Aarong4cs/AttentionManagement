@@ -6,7 +6,6 @@ export interface MenuTarget {
   title: string
   color: string | null
   priority: number | null
-  notes: string | null
   /** A mirrored Google event: colour and priority only. */
   readOnly?: boolean
   /** A trailed block also offers removing just that record of time. */
@@ -21,7 +20,7 @@ export default function TaskMenu({
   onRename,
   onRecolor,
   onPrioritise,
-  onNotes,
+  onSubtasks,
   onDeleteTask,
   onDeleteEntry,
 }: {
@@ -30,15 +29,14 @@ export default function TaskMenu({
   onRename: (taskId: string, title: string) => void
   onRecolor: (taskId: string, color: string | null) => void
   onPrioritise: (taskId: string, priority: number | null) => void
-  onNotes: (taskId: string, notes: string) => void
+  /** Only for a task in the sequence — that is where its steps show. */
+  onSubtasks?: (taskId: string) => void
   /** Omitted on the timeline: removing a whole task belongs to the sequence. */
   onDeleteTask?: (taskId: string) => void
   onDeleteEntry?: (entryId: string) => void
 }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(target.title)
-  const [editingNotes, setEditingNotes] = useState(false)
-  const [notes, setNotes] = useState(target.notes ?? '')
   const box = useRef<HTMLDivElement>(null)
 
   // keep the menu on screen when opened near an edge
@@ -63,47 +61,12 @@ export default function TaskMenu({
     <div className="menu-backdrop" onPointerDown={onClose} onContextMenu={(e) => e.preventDefault()}>
       <div
         ref={box}
-        className={editingNotes ? 'menu is-wide' : 'menu'}
+        className="menu"
         role="menu"
         style={{ left: pos.left, top: pos.top }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {editingNotes ? (
-          <form
-            className="menu-notes"
-            onSubmit={(e) => {
-              e.preventDefault()
-              onNotes(target.taskId, notes)
-              onClose()
-            }}
-          >
-            <label>
-              Description
-              <textarea
-                autoFocus
-                rows={7}
-                value={notes}
-                placeholder={'Step 1 …\nStep 2 …'}
-                onChange={(e) => setNotes(e.target.value)}
-                onKeyDown={(e) => {
-                  // Enter makes a new line here; Cmd/Ctrl+Enter saves
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault()
-                    onNotes(target.taskId, notes)
-                    onClose()
-                  }
-                  if (e.key === 'Escape') onClose()
-                }}
-              />
-            </label>
-            <div className="row">
-              <button type="submit">Save</button>
-              <button type="button" className="link" onClick={onClose}>
-                cancel
-              </button>
-            </div>
-          </form>
-        ) : renaming ? (
+        {renaming ? (
           <form
             className="menu-rename"
             onSubmit={(e) => {
@@ -134,9 +97,15 @@ export default function TaskMenu({
               </button>
             )}
 
-            {!target.readOnly && (
-              <button role="menuitem" onClick={() => setEditingNotes(true)}>
-                {target.notes ? 'Edit description…' : 'Add description…'}
+            {!target.readOnly && onSubtasks && (
+              <button
+                role="menuitem"
+                onClick={() => {
+                  onSubtasks(target.taskId)
+                  onClose()
+                }}
+              >
+                Subtasks…
               </button>
             )}
 

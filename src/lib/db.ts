@@ -11,7 +11,7 @@ import { rankAppend, rankBetween } from './rank'
 import { clippedMs } from './time'
 import { MAX_ESTIMATE_MINUTES, STALE_TIMER_HOURS } from './constants'
 import type { Rank } from './rank'
-import type { Block, DateOnly, Profile, Task, TimeEntry, Uuid } from './types'
+import type { Block, DateOnly, Profile, Task, TimeEntry, Uuid, Subtask } from './types'
 import { buildBlocks, emptySnapshot, type EntryRow, type Snapshot } from './offline'
 
 type Rank_ = Rank
@@ -277,15 +277,20 @@ export async function fetchSnapshot(
   start: Date,
   end: Date,
 ): Promise<Snapshot> {
-  const [profile, tasks, rows, running] = await Promise.all([
+  const [profile, [tasks, subtasks], rows, running] = await Promise.all([
     getProfile(),
-    getSequence(today),
+    // steps are fetched for exactly the tasks on screen, so they wait on those
+    // ids — but alongside the other reads, not after all of them
+    getSequence(today).then(
+      async (t) => [t, await getSubtasks(t.map((x) => x.id))] as const,
+    ),
     fetchRangeRows(start, end),
     getRunningEntry(),
   ])
   return {
     profile,
     tasks,
+    subtasks,
     rangeTasks: rows.rangeTasks,
     entries: rows.entries,
     running,
@@ -454,6 +459,21 @@ export async function getProfile(): Promise<Profile> {
   return data
 }
 
+/** A step built on the client, so it can show before the server has it. */
+export function draftSubtask(
+  fields: Pick<Subtask, 'id' | 'user_id' | 'task_id' | 'title' | 'rank'> &
+    Partial<Subtask>,
+): Subtask {
+  const now = new Date().toISOString()
+  return {
+    done_at: null,
+    deleted_at: null,
+    created_at: now,
+    updated_at: now,
+    ...fields,
+  }
+}
+
 /** Insert an already-built task row, for offline replay. */
 export async function createTaskRow(task: Task): Promise<Task> {
   const { data, error } = await supabase
@@ -564,15 +584,52 @@ export async function setPriority(
   return data
 }
 
-/** Set a task's description. Empty means none, not an empty string. */
-export async function setNotes(taskId: Uuid, notes: string): Promise<Task> {
-  const trimmed = notes.trim()
+// ---------------------------------------------------------------------------
+// subtasks
+// ---------------------------------------------------------------------------
+
+/** The live steps under the given tasks, in order. */
+export async function getSubtasks(taskIds: readonly Uuid[]): Promise<Subtask[]> {
+  if (taskIds.length === 0) return []
   const { data, error } = await supabase
-    .from('tasks')
-    .update({ notes: trimmed === '' ? null : trimmed })
-    .eq('id', taskId)
-    .select()
-    .single()
+    .from('subtasks')
+    .select('*')
+    .in('task_id', taskIds)
+    .is('deleted_at', null)
+    .order('rank')
+    .order('id')
   if (error) throw error
   return data
+}
+
+/** Insert an already-built step, for offline replay. */
+export async function createSubtaskRow(step: Subtask): Promise<void> {
+  const { error } = await supabase.from('subtasks').insert({
+    id: step.id,
+    task_id: step.task_id,
+    title: step.title,
+    rank: step.rank,
+    done_at: step.done_at,
+  })
+  if (error) throw error
+}
+
+/** Tick or untick a step. Null means not done. */
+export async function setSubtaskDone(id: Uuid, doneAt: string | null): Promise<void> {
+  const { error } = await supabase.from('subtasks').update({ done_at: doneAt }).eq('id', id)
+  if (error) throw error
+}
+
+export async function renameSubtask(id: Uuid, title: string): Promise<void> {
+  const { error } = await supabase.from('subtasks').update({ title }).eq('id', id)
+  if (error) throw error
+}
+
+/** Soft, like everything else the queue can delete. */
+export async function deleteSubtask(id: Uuid): Promise<void> {
+  const { error } = await supabase
+    .from('subtasks')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
 }
