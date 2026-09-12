@@ -32,7 +32,7 @@ const check = (ok, msg, detail = '') => {
   if (!ok) fails++
 }
 
-for (const table of ['tasks', 'time_entries', 'recurrences', 'profiles', 'subtasks']) {
+for (const table of ['tasks', 'time_entries', 'recurrences', 'profiles', 'subtasks', 'presets']) {
   const { data, error } = await sb.from(table).select('*')
   check(
     (data ?? []).length === 0,

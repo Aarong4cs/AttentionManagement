@@ -108,22 +108,55 @@ export type Database = {
         }
         Relationships: []
       }
+      presets: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          rank: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          rank: string
+          title: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          rank?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
           id: string
+          presets_enabled: boolean
           timezone: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           id: string
+          presets_enabled?: boolean
           timezone?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
+          presets_enabled?: boolean
           timezone?: string
           updated_at?: string
         }
@@ -244,6 +277,7 @@ export type Database = {
           id: string
           notes: string | null
           occurrence_date: string | null
+          preset_id: string | null
           priority: number | null
           rank: string
           recurrence_id: string | null
@@ -269,6 +303,7 @@ export type Database = {
           id?: string
           notes?: string | null
           occurrence_date?: string | null
+          preset_id?: string | null
           priority?: number | null
           rank: string
           recurrence_id?: string | null
@@ -294,6 +329,7 @@ export type Database = {
           id?: string
           notes?: string | null
           occurrence_date?: string | null
+          preset_id?: string | null
           priority?: number | null
           rank?: string
           recurrence_id?: string | null
@@ -304,6 +340,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_preset_id_fkey"
+            columns: ["preset_id"]
+            isOneToOne: false
+            referencedRelation: "presets"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_recurrence_id_fkey"
             columns: ["recurrence_id"]

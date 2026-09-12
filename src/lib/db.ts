@@ -11,7 +11,7 @@ import { rankAppend, rankBetween } from './rank'
 import { clippedMs } from './time'
 import { MAX_ESTIMATE_MINUTES, STALE_TIMER_HOURS } from './constants'
 import type { Rank } from './rank'
-import type { Block, DateOnly, Profile, Task, TimeEntry, Uuid, Subtask } from './types'
+import type { Block, DateOnly, Profile, Task, TimeEntry, Uuid, Subtask, Preset } from './types'
 import { buildBlocks, emptySnapshot, type EntryRow, type Snapshot } from './offline'
 
 type Rank_ = Rank
@@ -46,6 +46,7 @@ export function draftTask(
     external_calendar: null,
     google_event_id: null,
     google_synced_at: null,
+    preset_id: null,
     created_at: now,
     updated_at: now,
     ...fields,
@@ -277,7 +278,7 @@ export async function fetchSnapshot(
   start: Date,
   end: Date,
 ): Promise<Snapshot> {
-  const [profile, [tasks, subtasks], rows, running] = await Promise.all([
+  const [profile, [tasks, subtasks], rows, running, presets] = await Promise.all([
     getProfile(),
     // steps are fetched for exactly the tasks on screen, so they wait on those
     // ids — but alongside the other reads, not after all of them
@@ -286,11 +287,13 @@ export async function fetchSnapshot(
     ),
     fetchRangeRows(start, end),
     getRunningEntry(),
+    getPresets(),
   ])
   return {
     profile,
     tasks,
     subtasks,
+    presets,
     rangeTasks: rows.rangeTasks,
     entries: rows.entries,
     running,
@@ -459,6 +462,14 @@ export async function getProfile(): Promise<Profile> {
   return data
 }
 
+/** A preset built on the client, so it can show before the server has it. */
+export function draftPreset(
+  fields: Pick<Preset, 'id' | 'user_id' | 'title' | 'rank'> & Partial<Preset>,
+): Preset {
+  const now = new Date().toISOString()
+  return { deleted_at: null, created_at: now, updated_at: now, ...fields }
+}
+
 /** A step built on the client, so it can show before the server has it. */
 export function draftSubtask(
   fields: Pick<Subtask, 'id' | 'user_id' | 'task_id' | 'title' | 'rank'> &
@@ -488,6 +499,7 @@ export async function createTaskRow(task: Task): Promise<Task> {
       completed_at: task.completed_at,
       color: task.color,
       priority: task.priority,
+      preset_id: task.preset_id,
     })
     .select()
     .single()
@@ -630,6 +642,54 @@ export async function deleteSubtask(id: Uuid): Promise<void> {
   const { error } = await supabase
     .from('subtasks')
     .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
+// ---------------------------------------------------------------------------
+// preset tasks
+// ---------------------------------------------------------------------------
+
+/** The live presets, in the order they were added. */
+export async function getPresets(): Promise<Preset[]> {
+  const { data, error } = await supabase
+    .from('presets')
+    .select('*')
+    .is('deleted_at', null)
+    .order('rank')
+    .order('id')
+  if (error) throw error
+  return data
+}
+
+/** Insert an already-built preset, for offline replay. */
+export async function createPresetRow(preset: Preset): Promise<void> {
+  const { error } = await supabase
+    .from('presets')
+    .insert({ id: preset.id, title: preset.title, rank: preset.rank })
+  if (error) throw error
+}
+
+/**
+ * Soft-delete the preset only. Its task keeps the time already tracked under
+ * it, and keeps preset_id, so it stays out of the sequence.
+ */
+export async function deletePreset(id: Uuid): Promise<void> {
+  const { error } = await supabase
+    .from('presets')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
+/** Show or hide Preset tasks in the task menu, on every device. */
+export async function setPresetsEnabled(enabled: boolean): Promise<void> {
+  const { data } = await supabase.auth.getSession()
+  const id = data.session?.user.id
+  if (!id) throw new Error('not signed in')
+  const { error } = await supabase
+    .from('profiles')
+    .update({ presets_enabled: enabled })
     .eq('id', id)
   if (error) throw error
 }

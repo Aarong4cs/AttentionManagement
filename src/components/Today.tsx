@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNow } from '../hooks/useNow'
 import { useOfflineData } from '../hooks/useOfflineData'
-import { draftSubtask, draftTask, elapsedMs, getProfile, isStale, newId } from '../lib/db'
+import {
+  draftPreset,
+  draftSubtask,
+  draftTask,
+  elapsedMs,
+  getProfile,
+  isStale,
+  newId,
+} from '../lib/db'
 import { minutesBetween } from '../lib/layout'
 import { buildBlocks, loadSnapshot } from '../lib/offline'
-import { rankAppend, rankBetween } from '../lib/rank'
+import { rankAppend, rankBetween, ranksBetween } from '../lib/rank'
 import { STALE_TIMER_HOURS, WEEK_STARTS_ON } from '../lib/constants'
 import { addDays, startOfWeek, todayIn, zonedDayEnd, zonedDayStart } from '../lib/time'
-import type { Block, Subtask, Task, Uuid } from '../lib/types'
+import type { Block, Preset, Subtask, Task, Uuid } from '../lib/types'
 import Timeline, { type TimelineDay } from './Timeline'
 import Sequence from './Sequence'
 import TaskMenu, { type MenuTarget } from './TaskMenu'
@@ -80,6 +88,16 @@ export default function Today({ email }: { email: string }) {
   const data = useOfflineData(todayIn(tz), rangeStart, rangeEnd)
   const { view: snap, enqueue } = data
   const blocks = useMemo(() => buildBlocks(snap), [snap])
+
+  /*
+   * A preset's task lives in snap.tasks — it has no due date, and the timer
+   * banner reads its name from there — but it is not part of the sequence.
+   * Filtered once, here, so nothing that works on the sequence ever sees one.
+   */
+  const sequenceTasks = useMemo(
+    () => snap.tasks.filter((t) => t.preset_id === null),
+    [snap.tasks],
+  )
 
   /**
    * A sync that finishes in a few hundred milliseconds should not announce
@@ -226,6 +244,31 @@ export default function Today({ email }: { email: string }) {
     })
   }
 
+  /**
+   * Start a preset's timer. Each preset is backed by one task, made the first
+   * time it runs and reused after that, so all of its time stays together. If
+   * two devices each made one while offline, the oldest is the one reused.
+   */
+  function startPreset(preset: Preset) {
+    const at = new Date().toISOString()
+    let task = snap.tasks
+      .filter((t) => t.preset_id === preset.id)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))[0]
+    if (!task) {
+      task = draftTask({
+        id: newId(),
+        user_id: snap.profile?.id ?? '',
+        title: preset.title,
+        rank: rankAppend(snap.tasks.map((x) => x.rank)),
+        preset_id: preset.id,
+      })
+      enqueue({ op: 'createTask', at, task })
+    }
+    // picking the one already running leaves it running rather than stopping it
+    if (snap.running?.task_id === task.id) return
+    toggle(task)
+  }
+
   function toggleSubtask(step: Subtask) {
     const at = new Date().toISOString()
     enqueue({ op: 'toggleSubtask', at, subtaskId: step.id, doneAt: step.done_at ? null : at })
@@ -346,7 +389,7 @@ export default function Today({ email }: { email: string }) {
         </section>
 
         <Sequence
-          tasks={snap.tasks}
+          tasks={sequenceTasks}
           runningTaskId={snap.running?.task_id ?? null}
           title={title}
           onTitleChange={setTitle}
@@ -357,7 +400,7 @@ export default function Today({ email }: { email: string }) {
             enqueue({
               op: 'clearCompleted',
               at: new Date().toISOString(),
-              taskIds: snap.tasks.filter((t) => t.completed_at).map((t) => t.id),
+              taskIds: sequenceTasks.filter((t) => t.completed_at).map((t) => t.id),
             })
           }
           onMenu={openTaskMenu}
@@ -417,8 +460,11 @@ export default function Today({ email }: { email: string }) {
           }
           onSubtasks={
             // steps show under the timer, and only a sequence task can run
-            snap.tasks.some((t) => t.id === menu.taskId) ? setStepsFor : undefined
+            sequenceTasks.some((t) => t.id === menu.taskId) ? setStepsFor : undefined
           }
+          presets={snap.profile?.presets_enabled ? snap.presets : undefined}
+          runningPresetId={runningTask?.preset_id ?? null}
+          onStartPreset={startPreset}
           onDeleteTask={
             // deleting the whole task belongs to the sequence; the timeline
             // only ever removes a single record of time
@@ -482,6 +528,32 @@ export default function Today({ email }: { email: string }) {
           onClose={() => setShowSettings(false)}
           onOpenCalendar={() => setShowCalendar(true)}
           onChanged={data.refresh}
+          presets={snap.presets}
+          presetsEnabled={snap.profile?.presets_enabled ?? false}
+          onTogglePresets={(enabled) =>
+            enqueue({ op: 'setPresetsEnabled', at: new Date().toISOString(), enabled })
+          }
+          onAddPresets={(titles) => {
+            const at = new Date().toISOString()
+            // one key per title, so a batch keeps the order it was given in
+            const last = snap.presets[snap.presets.length - 1]?.rank ?? null
+            const keys = ranksBetween(last, null, titles.length)
+            titles.forEach((title, i) =>
+              enqueue({
+                op: 'createPreset',
+                at,
+                preset: draftPreset({
+                  id: newId(),
+                  user_id: snap.profile?.id ?? '',
+                  title,
+                  rank: keys[i],
+                }),
+              }),
+            )
+          }}
+          onDeletePreset={(preset) =>
+            enqueue({ op: 'deletePreset', at: new Date().toISOString(), presetId: preset.id })
+          }
         />
       )}
 

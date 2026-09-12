@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { clearLocal } from '../lib/offline'
 import { syncNow } from '../lib/gcalClient'
 import { useTheme, type Theme } from '../hooks/useTheme'
+import type { Preset } from '../lib/types'
 
 const THEMES: { id: Theme; label: string }[] = [
   { id: 'system', label: 'System' },
@@ -10,21 +11,36 @@ const THEMES: { id: Theme; label: string }[] = [
   { id: 'dark', label: 'Dark' },
 ]
 
+/** Offered when the list is empty — the examples the feature was asked for with. */
+const SUGGESTED = ['Resting', 'Leisure', 'Eating', 'Commuting']
+
 export default function Settings({
   email,
   onClose,
   onOpenCalendar,
   onChanged,
+  presets,
+  presetsEnabled,
+  onTogglePresets,
+  onAddPresets,
+  onDeletePreset,
 }: {
   email: string
   onClose: () => void
   onOpenCalendar: () => void
   onChanged: () => void
+  presets: readonly Preset[]
+  presetsEnabled: boolean
+  onTogglePresets: (enabled: boolean) => void
+  /** Several at once keep the order given, which one call per title would not. */
+  onAddPresets: (titles: string[]) => void
+  onDeletePreset: (preset: Preset) => void
 }) {
   const { theme, setTheme } = useTheme()
   const [syncing, setSyncing] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const [presetTitle, setPresetTitle] = useState('')
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -118,6 +134,71 @@ export default function Settings({
             </button>
           </div>
           {note && <p className={failed ? 'error' : 'muted hint'}>{note}</p>}
+        </section>
+
+        <section className="setting">
+          <h3>Preset tasks</h3>
+          <label className="check grow setting-switch">
+            <input
+              type="checkbox"
+              checked={presetsEnabled}
+              onChange={(e) => onTogglePresets(e.target.checked)}
+            />
+            <span className="rule-text">
+              <span className="title">Show in the task menu</span>
+              <span className="muted">
+                Pick one to start its timer straight away. Its time goes on the
+                timeline; it never joins your sequence.
+              </span>
+            </span>
+          </label>
+
+          {presets.length > 0 ? (
+            <ul className="preset-list">
+              {presets.map((p) => (
+                <li key={p.id}>
+                  <span className="preset-title">{p.title}</span>
+                  <button
+                    className="step-delete"
+                    aria-label={`Remove ${p.title}`}
+                    onClick={() => onDeletePreset(p)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="row">
+              <button className="chip" onClick={() => onAddPresets(SUGGESTED)}>
+                Add {SUGGESTED.join(', ')}
+              </button>
+            </div>
+          )}
+
+          <form
+            className="add"
+            onSubmit={(e) => {
+              e.preventDefault()
+              const t = presetTitle.trim()
+              if (!t) return
+              onAddPresets([t])
+              setPresetTitle('')
+            }}
+          >
+            <input
+              type="text"
+              value={presetTitle}
+              placeholder="Add a preset"
+              onChange={(e) => setPresetTitle(e.target.value)}
+            />
+            <button type="submit" disabled={!presetTitle.trim()}>
+              Add
+            </button>
+          </form>
+          <p className="muted hint">
+            Removing a preset keeps the time already tracked under it.
+          </p>
         </section>
 
         <section className="setting">

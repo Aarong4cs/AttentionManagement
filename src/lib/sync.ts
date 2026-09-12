@@ -14,9 +14,11 @@ import {
   UNIQUE_VIOLATION,
   adjustEntry,
   completeTask,
+  createPresetRow,
   createSubtaskRow,
   createTaskRow,
   deleteEntry,
+  deletePreset,
   deleteSubtask,
   deleteTask,
   moveTask,
@@ -24,6 +26,7 @@ import {
   renameSubtask,
   renameTask,
   rescheduleTask,
+  setPresetsEnabled,
   setPriority,
   setSubtaskDone,
   startTrailAt,
@@ -128,6 +131,15 @@ async function run(op: PendingOp): Promise<void> {
       return
     case 'deleteSubtask':
       await deleteSubtask(op.subtaskId)
+      return
+    case 'createPreset':
+      await createPresetRow(op.preset)
+      return
+    case 'deletePreset':
+      await deletePreset(op.presetId)
+      return
+    case 'setPresetsEnabled':
+      await setPresetsEnabled(op.enabled)
       return
   }
 }

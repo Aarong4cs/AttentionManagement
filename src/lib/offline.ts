@@ -12,7 +12,7 @@
  * view is testable without a browser or a network.
  */
 
-import type { Block, Profile, Task, TimeEntry, Uuid, Subtask } from './types'
+import type { Block, Profile, Task, TimeEntry, Uuid, Subtask, Preset } from './types'
 
 export interface EntryRow extends TimeEntry {
   /** Denormalised at fetch time so a trailed block can be drawn from cache. */
@@ -31,6 +31,8 @@ export interface Snapshot {
   entries: EntryRow[]
   /** Steps under the sequence tasks, in rank order. */
   subtasks: Subtask[]
+  /** Quick-start activities, in the order they were added. */
+  presets: Preset[]
   running: TimeEntry | null
   fetchedAt: string | null
 }
@@ -41,6 +43,7 @@ export const emptySnapshot: Snapshot = {
   rangeTasks: [],
   entries: [],
   subtasks: [],
+  presets: [],
   running: null,
   fetchedAt: null,
 }
@@ -70,6 +73,9 @@ export type PendingOp =
   | { op: 'toggleSubtask'; at: string; subtaskId: Uuid; doneAt: string | null }
   | { op: 'renameSubtask'; at: string; subtaskId: Uuid; title: string }
   | { op: 'deleteSubtask'; at: string; subtaskId: Uuid }
+  | { op: 'createPreset'; at: string; preset: Preset }
+  | { op: 'deletePreset'; at: string; presetId: Uuid }
+  | { op: 'setPresetsEnabled'; at: string; enabled: boolean }
 
 // ---------------------------------------------------------------------------
 // the optimistic view
@@ -93,6 +99,7 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
     entries: [...snapshot.entries],
     // absent on a snapshot cached before steps existed
     subtasks: [...(snapshot.subtasks ?? [])],
+    presets: [...(snapshot.presets ?? [])],
   }
 
   const patchTask = (id: Uuid, patch: Partial<Task>) => {
@@ -267,6 +274,22 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
         )
         break
 
+      case 'createPreset':
+        if (!s.presets.some((x) => x.id === op.preset.id)) {
+          s.presets.push(op.preset)
+        }
+        break
+
+      case 'deletePreset':
+        s.presets = s.presets.map((x) =>
+          x.id === op.presetId ? { ...x, deleted_at: op.at } : x,
+        )
+        break
+
+      case 'setPresetsEnabled':
+        if (s.profile) s.profile = { ...s.profile, presets_enabled: op.enabled }
+        break
+
       case 'deleteEntry':
         s.entries = s.entries.map((e) =>
           e.id === op.entryId ? { ...e, deleted_at: op.at } : e,
@@ -296,6 +319,10 @@ export function applyOps(snapshot: Snapshot, ops: readonly PendingOp[]): Snapsho
   s.entries = alive(s.entries)
   // a step has no priority: rank alone, as the server orders them
   s.subtasks = alive(s.subtasks).sort(
+    (a, b) =>
+      (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) || (a.id < b.id ? -1 : 1),
+  )
+  s.presets = alive(s.presets).sort(
     (a, b) =>
       (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0) || (a.id < b.id ? -1 : 1),
   )
@@ -391,8 +418,8 @@ export const loadQueue = (): PendingOp[] => read<PendingOp[]>(QUEUE_KEY, [])
 export const saveQueue = (ops: readonly PendingOp[]): void => write(QUEUE_KEY, ops)
 export const loadSnapshot = (): Snapshot => {
   const s = read<Snapshot>(SNAPSHOT_KEY, emptySnapshot)
-  // a snapshot cached before steps existed has no such key
-  return { ...s, subtasks: s.subtasks ?? [] }
+  // a snapshot cached before steps or presets existed has neither key
+  return { ...s, subtasks: s.subtasks ?? [], presets: s.presets ?? [] }
 }
 export const saveSnapshot = (s: Snapshot): void => write(SNAPSHOT_KEY, s)
 

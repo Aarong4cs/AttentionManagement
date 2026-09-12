@@ -242,6 +242,13 @@ export function useOfflineData(
       .on('postgres_changes', { event: '*', schema: 'public', table: 'subtasks' }, () =>
         void refresh(),
       )
+      // a preset added, or the menu switched on, on the other device
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'presets' }, () =>
+        void refresh(),
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () =>
+        void refresh(),
+      )
       .subscribe()
 
     return () => {

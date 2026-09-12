@@ -17,6 +17,7 @@ export type Recurrence = Tables['recurrences']['Row']
 export type Task = Tables['tasks']['Row']
 export type TimeEntry = Tables['time_entries']['Row']
 export type Subtask = Tables['subtasks']['Row']
+export type Preset = Tables['presets']['Row']
 
 export type ProfileUpdate = Tables['profiles']['Update']
 export type RecurrenceInsert = Tables['recurrences']['Insert']
