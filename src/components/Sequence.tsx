@@ -1,7 +1,51 @@
-import { useRef, useState, type FormEvent, type PointerEvent, type ReactNode } from 'react'
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type PointerEvent,
+  type ReactNode,
+} from 'react'
 import { insertionIndex } from '../lib/layout'
 import { useLongPress } from '../hooks/useLongPress'
 import type { Task, Uuid } from '../lib/types'
+
+/**
+ * A drag in progress. Everything here is measured once, when the grip is
+ * pressed, and never again.
+ *
+ * `mids` is the row midpoints of the ORIGINAL list, and the pointer is mapped
+ * against those for the whole gesture. Measuring live would feed back on
+ * itself: the rows move as the gap opens, which moves the midpoints, which
+ * moves the gap. Freezing the coordinate system is what stops it oscillating
+ * on the boundary between two rows.
+ */
+type Drag = {
+  id: Uuid
+  /** index of the dragged row in the original list */
+  from: number
+  mids: number[]
+  /** the floating row's box, so it sits exactly over the list it came from */
+  left: number
+  width: number
+  height: number
+  offsetY: number
+  scroller: HTMLElement | null
+  scrollTop: number
+}
+
+/** Where the pointer says the row belongs, in original-list coordinates. */
+function targetIndex(drag: Drag, clientY: number): number {
+  const scrolled = (drag.scroller?.scrollTop ?? 0) - drag.scrollTop
+  return insertionIndex(drag.mids, clientY + scrolled)
+}
+
+/** ...and the same thing as an index into the list without the dragged row. */
+function slotIndex(drag: Drag, clientY: number): number {
+  const to = targetIndex(drag, clientY)
+  return to > drag.from ? to - 1 : to
+}
 
 export default function Sequence({
   tasks,
@@ -32,58 +76,94 @@ export default function Sequence({
   running?: ReactNode
 }) {
   const rows = useRef(new Map<Uuid, HTMLLIElement>())
-  const [dragId, setDragId] = useState<Uuid | null>(null)
-  const [insertAt, setInsertAt] = useState<number | null>(null)
+  const list = useRef<HTMLUListElement>(null)
+  const [drag, setDrag] = useState<Drag | null>(null)
+  const [pointerY, setPointerY] = useState(0)
+  // the window handlers close over one `drag`; the latest pointer must come
+  // from a ref or pointerup commits a stale position
+  const pointerRef = useRef(0)
+  const tasksRef = useRef(tasks)
+  const moveRef = useRef(onMove)
+  useEffect(() => {
+    tasksRef.current = tasks
+    moveRef.current = onMove
+  })
 
   const hasCompleted = tasks.some((t) => t.completed_at)
   // the description of whatever is being tracked right now
   const runningTask = runningTaskId
     ? tasks.find((t) => t.id === runningTaskId)
     : undefined
-  const others = tasks.filter((t) => t.id !== dragId)
-  // which row the insertion line sits above, in the list's own order
-  const dropBeforeId =
-    dragId && insertAt !== null ? (others[insertAt]?.id ?? null) : null
+
+  const dragged = drag ? tasks.find((t) => t.id === drag.id) : undefined
+  const others = drag ? tasks.filter((t) => t.id !== drag.id) : tasks
+  const slot = drag ? slotIndex(drag, pointerY) : -1
 
   /**
    * Pointer events rather than HTML5 drag-and-drop: the latter does not fire on
    * iOS at all, and this has to work on the phone first.
    */
-  function onPointerDown(e: PointerEvent<HTMLButtonElement>, task: Task) {
+  function beginDrag(e: PointerEvent<HTMLButtonElement>, task: Task) {
     e.preventDefault()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    setDragId(task.id)
-    setInsertAt(tasks.findIndex((t) => t.id === task.id))
+    e.stopPropagation()
+    const from = tasks.findIndex((t) => t.id === task.id)
+    const self = rows.current.get(task.id)?.getBoundingClientRect()
+    const box = list.current?.getBoundingClientRect()
+    if (from < 0 || !self || !box) return
+    setDrag({
+      id: task.id,
+      from,
+      mids: tasks.map((t) => {
+        const r = rows.current.get(t.id)?.getBoundingClientRect()
+        return r ? r.top + r.height / 2 : Infinity
+      }),
+      left: box.left,
+      width: box.width,
+      height: self.height,
+      offsetY: e.clientY - self.top,
+      scroller: list.current?.closest('.sequence') ?? null,
+      scrollTop: list.current?.closest('.sequence')?.scrollTop ?? 0,
+    })
+    pointerRef.current = e.clientY
+    setPointerY(e.clientY)
   }
 
-  function onPointerMove(e: PointerEvent<HTMLButtonElement>) {
-    if (!dragId) return
-    // midpoints of every row EXCEPT the one in hand, so the result is an index
-    // into that list and names the two neighbours directly
-    const midpoints = others
-      .map((t) => rows.current.get(t.id))
-      .filter((el): el is HTMLLIElement => Boolean(el))
-      .map((el) => {
-        const r = el.getBoundingClientRect()
-        return r.top + r.height / 2
-      })
-    setInsertAt(insertionIndex(midpoints, e.clientY))
-  }
+  /*
+   * Tracked on the window, not the grip.
+   *
+   * The row is pulled out of the list the moment the drag starts, which
+   * unmounts the element the gesture began on and takes any pointer capture
+   * with it — the handle would go dead on the first move. The window does not
+   * care what happened to the element.
+   */
+  useEffect(() => {
+    if (!drag) return
 
-  function onPointerUp(e: PointerEvent<HTMLButtonElement>) {
-    if (dragId && insertAt !== null) {
-      const before = others[insertAt - 1] ?? null
-      const after = others[insertAt] ?? null
-      const current = tasks.findIndex((t) => t.id === dragId)
-      const unchanged =
-        others[insertAt - 1]?.id === tasks[current - 1]?.id &&
-        others[insertAt]?.id === tasks[current + 1]?.id
-      if (!unchanged) onMove(dragId, before, after)
+    const move = (e: globalThis.PointerEvent) => {
+      pointerRef.current = e.clientY
+      setPointerY(e.clientY)
     }
-    e.currentTarget.releasePointerCapture?.(e.pointerId)
-    setDragId(null)
-    setInsertAt(null)
-  }
+    const up = () => {
+      const all = tasksRef.current
+      const rest = all.filter((t) => t.id !== drag.id)
+      const at = slotIndex(drag, pointerRef.current)
+      const before = rest[at - 1] ?? null
+      const after = rest[at] ?? null
+      const unchanged =
+        before?.id === all[drag.from - 1]?.id && after?.id === all[drag.from + 1]?.id
+      if (!unchanged) moveRef.current(drag.id, before, after)
+      setDrag(null)
+    }
+
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [drag])
 
   return (
     <section className="pane sequence">
@@ -109,33 +189,57 @@ export default function Sequence({
       {tasks.length === 0 ? (
         <p className="muted">Nothing in the sequence.</p>
       ) : (
-        <ul className={dragId ? 'seq is-dragging' : 'seq'}>
+        <ul className={drag ? 'seq is-dragging' : 'seq'} ref={list}>
           {/*
-            The list keeps its own order while dragging, and only an insertion
-            line moves. Pulling the dragged row out and re-rendering it
-            elsewhere reorders the DOM under the pointer mid-gesture, which
-            loses the pointer capture and makes the handle feel dead.
+            The dragged row leaves the list and a slot of its exact height
+            takes its place, so the rows around it settle into the order they
+            will actually be in. Releasing only writes down what is already
+            on screen.
           */}
-          {tasks.map((task) => (
-            <RowGroup
-              key={task.id}
-              showLine={dropBeforeId === task.id}
-              task={task}
-              rows={rows}
-              dragId={dragId}
-              runningTaskId={runningTaskId}
-              onToggle={onToggle}
-              onComplete={onComplete}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onMenu={onMenu}
-              onRename={onRename}
-            />
+          {others.map((task, i) => (
+            <Fragment key={task.id}>
+              {i === slot && (
+                <li className="seq-slot" style={{ height: drag?.height }} aria-hidden="true" />
+              )}
+              <RowGroup
+                task={task}
+                rows={rows}
+                runningTaskId={runningTaskId}
+                onToggle={onToggle}
+                onComplete={onComplete}
+                onPointerDown={beginDrag}
+                onMenu={onMenu}
+                onRename={onRename}
+              />
+            </Fragment>
           ))}
-          {dragId && insertAt === others.length && (
-            <li className="drop-line" aria-hidden="true" />
+          {slot === others.length && (
+            <li className="seq-slot" style={{ height: drag?.height }} aria-hidden="true" />
           )}
+        </ul>
+      )}
+
+      {/*
+        The row in hand, following the pointer. A copy rather than the original
+        element: the original has to leave the list for the others to close up
+        behind it.
+      */}
+      {drag && dragged && (
+        <ul
+          className="seq seq-float"
+          aria-hidden="true"
+          style={{ left: drag.left, width: drag.width, top: pointerY - drag.offsetY }}
+        >
+          <RowGroup
+            task={dragged}
+            rows={{ current: new Map() }}
+            runningTaskId={runningTaskId}
+            onToggle={() => {}}
+            onComplete={() => {}}
+            onPointerDown={() => {}}
+            onMenu={() => {}}
+            onRename={() => {}}
+          />
         </ul>
       )}
 
@@ -150,47 +254,35 @@ export default function Sequence({
 
 function RowGroup({
   task,
-  showLine,
   rows,
-  dragId,
   runningTaskId,
   onToggle,
   onComplete,
   onPointerDown,
-  onPointerMove,
-  onPointerUp,
   onMenu,
   onRename,
 }: {
   task: Task
-  showLine: boolean
   rows: React.RefObject<Map<Uuid, HTMLLIElement>>
-  dragId: Uuid | null
   runningTaskId: Uuid | null
   onToggle: (t: Task) => void
   onComplete: (t: Task) => void
   onPointerDown: (e: PointerEvent<HTMLButtonElement>, t: Task) => void
-  onPointerMove: (e: PointerEvent<HTMLButtonElement>) => void
-  onPointerUp: (e: PointerEvent<HTMLButtonElement>) => void
   onMenu: (task: Task, x: number, y: number) => void
   onRename: (taskId: Uuid, title: string) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(task.title)
   const isOn = runningTaskId === task.id
-  const isDragged = dragId === task.id
   const hold = useLongPress((x, y) => onMenu(task, x, y))
   return (
     <>
-      {showLine && <li className="drop-line" aria-hidden="true" />}
       <li
         ref={(el) => {
           if (el) rows.current.set(task.id, el)
           else rows.current.delete(task.id)
         }}
-        className={[task.completed_at ? 'done' : '', isDragged ? 'is-dragged' : '']
-          .filter(Boolean)
-          .join(' ')}
+        className={task.completed_at ? 'done' : undefined}
         data-color={task.color ?? undefined}
         data-priority={task.priority ?? undefined}
         onContextMenu={(e) => {
@@ -210,9 +302,6 @@ function RowGroup({
             e.stopPropagation()
             onPointerDown(e, task)
           }}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
         >
           ⠿
         </button>
